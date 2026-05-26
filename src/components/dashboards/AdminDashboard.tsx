@@ -1,36 +1,166 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
-  ShieldCheck, FileText, CheckCircle, XCircle, Grid, Clock, Users, ArrowRight, Star
+  ShieldCheck, FileText, CheckCircle, XCircle, Grid, Clock, Users, ArrowRight, Star,
+  Home, Bell, Activity, Smartphone, Image as ImageIcon, Layout, ListCollapse, Play, Sparkles,
+  Zap, Ticket, Send, Award, UsersRound, UserPlus, PackageOpen, Tag, Percent,
+  ShoppingCart, Truck, MapPin, AlertTriangle, UserCheck, Heart, Wallet, MessageSquare,
+  BarChart, ChevronDown, ChevronUp, Settings, Map, Lock, ClipboardList, Plus, Search,
+  Filter, Trash2, Edit3, Eye, Power, Check, X
 } from 'lucide-react';
 import { supabase } from '../../supabaseClient';
 
+interface SidebarItem {
+  id: string;
+  label: string;
+  icon: any;
+}
+
+interface SidebarGroup {
+  id: string;
+  title: string;
+  items: SidebarItem[];
+}
+
 export const AdminDashboard = ({ onBack, defaultTab, hideSidebar = false }: { onBack?: () => void, defaultTab?: string, hideSidebar?: boolean }) => {
-  const [activeNav, setActiveNav] = useState(defaultTab || 'dashboard');
+  const [activeNav, setActiveNav] = useState(defaultTab || 'admin_home');
+  const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({
+    overview: false,
+    app_management: false,
+    partners_management: false,
+    orders_operation: false,
+    customers: false,
+    reports: false,
+    settings: false
+  });
+
+  // DB States
   const [partnerApps, setPartnerApps] = useState<any[]>([]);
   const [driverApps, setDriverApps] = useState<any[]>([]);
+  const [categories, setCategories] = useState<any[]>([]);
+  const [sponsoredProducts, setSponsoredProducts] = useState<any[]>([]);
+  const [orders, setOrders] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
 
-  // Fetch pending partner/driver applications
-  const fetchApplications = async () => {
+  // Search & Filters
+  const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
+
+  // Custom Local Storage States (Simulated database tables for app elements)
+  const [banners, setBanners] = useState<any[]>(() => {
+    const saved = localStorage.getItem('boostx_banners');
+    return saved ? JSON.parse(saved) : [
+      { id: 'b1', title: 'خصومات الصيف الكبرى ☀️', image: 'https://images.unsplash.com/photo-1555507036-ab1f4038808a?w=800&q=80', active: true, route: '/promos' },
+      { id: 'b2', title: 'توصيل مجاني هذا الأسبوع 🛵', image: 'https://images.unsplash.com/photo-1526367790999-0150786486a9?w=800&q=80', active: true, route: '/free-delivery' }
+    ];
+  });
+
+  const [sections, setSections] = useState<any[]>(() => {
+    const saved = localStorage.getItem('boostx_sections');
+    return saved ? JSON.parse(saved) : [
+      { id: 'sec1', name: 'أبرز عروض اليوم 🔥', order: 1, active: true },
+      { id: 'sec2', name: 'المتاجر الأكثر شعبية ⭐', order: 2, active: true },
+      { id: 'sec3', name: 'صنايعية وخدمات منزلية 🛠️', order: 3, active: true }
+    ];
+  });
+
+  const [stories, setStories] = useState<any[]>(() => {
+    const saved = localStorage.getItem('boostx_stories');
+    return saved ? JSON.parse(saved) : [
+      { id: 's1', store: 'مطعم البيك', content: 'افتتاح فرع الياسمين الجديد! 🎉', image: 'https://images.unsplash.com/photo-1555939594-58d7cb561ad1?w=400&q=80', approved: true, active: true },
+      { id: 's2', store: 'صيدلية النهدي', content: 'خصم ٢٠٪ على الفيتامينات 💊', image: 'https://images.unsplash.com/photo-1585435557343-3b092031a831?w=400&q=80', approved: false, active: true }
+    ];
+  });
+
+  const [coupons, setCoupons] = useState<any[]>(() => {
+    const saved = localStorage.getItem('boostx_coupons');
+    return saved ? JSON.parse(saved) : [
+      { code: 'BOOSTX20', discount: '٢٠٪', minSpend: '١٠٠ ر.س', active: true },
+      { code: 'FREEBY', discount: 'توصيل مجاني', minSpend: '٥٠ ر.س', active: false }
+    ];
+  });
+
+  const [rewards, setRewards] = useState<any[]>(() => {
+    const saved = localStorage.getItem('boostx_rewards');
+    return saved ? JSON.parse(saved) : [
+      { id: 'r1', title: 'كوب شاي مجاني ☕', cost: 100, active: true },
+      { id: 'r2', title: 'خصم ١٥ ر.س للتوصيل', cost: 300, active: true }
+    ];
+  });
+
+  const [pushLogs, setPushLogs] = useState<any[]>(() => {
+    const saved = localStorage.getItem('boostx_push_logs');
+    return saved ? JSON.parse(saved) : [
+      { id: '1', title: 'عرض فلاش فوري! ⚡', body: 'تخفيضات ٥٠٪ على الوجبات السريعة تبدأ الآن.', sentAt: new Date(Date.now() - 3600000).toLocaleString('ar-EG') }
+    ];
+  });
+
+  // Modal Control States
+  const [showAddBannerModal, setShowAddBannerModal] = useState(false);
+  const [newBanner, setNewBanner] = useState({ title: '', image: '', route: '' });
+
+  const [showAddCouponModal, setShowAddCouponModal] = useState(false);
+  const [newCoupon, setNewCoupon] = useState({ code: '', discount: '', minSpend: '' });
+
+  const [showAddRewardModal, setShowAddRewardModal] = useState(false);
+  const [newReward, setNewReward] = useState({ title: '', cost: 100 });
+
+  const [pushTitle, setPushTitle] = useState('');
+  const [pushBody, setPushBody] = useState('');
+
+  // Persist Local States
+  useEffect(() => {
+    localStorage.setItem('boostx_banners', JSON.stringify(banners));
+  }, [banners]);
+
+  useEffect(() => {
+    localStorage.setItem('boostx_sections', JSON.stringify(sections));
+  }, [sections]);
+
+  useEffect(() => {
+    localStorage.setItem('boostx_stories', JSON.stringify(stories));
+  }, [stories]);
+
+  useEffect(() => {
+    localStorage.setItem('boostx_coupons', JSON.stringify(coupons));
+  }, [coupons]);
+
+  useEffect(() => {
+    localStorage.setItem('boostx_rewards', JSON.stringify(rewards));
+  }, [rewards]);
+
+  useEffect(() => {
+    localStorage.setItem('boostx_push_logs', JSON.stringify(pushLogs));
+  }, [pushLogs]);
+
+  // Fetch from Supabase
+  const fetchData = async () => {
     setLoading(true);
     try {
       const { data: partners } = await supabase.from('partner_applications').select('*').order('created_at', { ascending: false });
       const { data: drivers } = await supabase.from('driver_applications').select('*').order('created_at', { ascending: false });
+      const { data: cats } = await supabase.from('categories').select('*');
+      const { data: sps } = await supabase.from('sponsored_products').select('*');
+      const { data: ords } = await supabase.from('orders').select('*').order('created_at', { ascending: false });
+
       if (partners) setPartnerApps(partners);
       if (drivers) setDriverApps(drivers);
+      if (cats) setCategories(cats);
+      if (sps) setSponsoredProducts(sps);
+      if (ords) setOrders(ords);
     } catch (e) {
-      console.log('Sandbox simulation mode active.');
+      console.log('Using sandbox simulation data fallback.');
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchApplications();
+    fetchData();
+
     const handleRealtime = (e: any) => {
-      if (e.detail?.table === 'partner_applications' || e.detail?.table === 'driver_applications') {
-        fetchApplications();
+      if (['partner_applications', 'driver_applications', 'categories', 'sponsored_products', 'orders'].includes(e.detail?.table)) {
+        fetchData();
       }
     };
     window.addEventListener('BX_REALTIME_CHANGE', handleRealtime);
@@ -41,10 +171,10 @@ export const AdminDashboard = ({ onBack, defaultTab, hideSidebar = false }: { on
     try {
       const { error } = await supabase.from('partner_applications').update({ status: 'verified' }).eq('id', appId);
       if (error) throw error;
-      alert('تم توثيق واعتماد الشريك بنجاح! ✅');
-      fetchApplications();
+      alert('تم توثيق الشريك بنجاح ومزامنته مع التطبيق! ✅');
+      fetchData();
     } catch (e: any) {
-      alert('فشل تحديث الحالة: ' + e.message);
+      alert('حدث خطأ: ' + e.message);
     }
   };
 
@@ -53,523 +183,1114 @@ export const AdminDashboard = ({ onBack, defaultTab, hideSidebar = false }: { on
       const { error } = await supabase.from('partner_applications').update({ status: 'rejected' }).eq('id', appId);
       if (error) throw error;
       alert('تم رفض طلب انضمام الشريك ❌');
-      fetchApplications();
+      fetchData();
     } catch (e: any) {
       alert('حدث خطأ: ' + e.message);
     }
   };
+
+  const handleApproveDriver = async (appId: string) => {
+    try {
+      const { error } = await supabase.from('driver_applications').update({ status: 'verified' }).eq('id', appId);
+      if (error) throw error;
+      alert('تم توثيق واعتماد كابتن التوصيل بنجاح! 🛵');
+      fetchData();
+    } catch (e: any) {
+      alert('حدث خطأ: ' + e.message);
+    }
+  };
+
+  const handleToggleCategory = async (id: string, currentVal: boolean) => {
+    try {
+      const { error } = await supabase.from('categories').update({ is_active: !currentVal }).eq('id', id);
+      if (!error) {
+        setCategories(prev => prev.map(c => c.id === id ? { ...c, is_active: !currentVal } : c));
+      }
+    } catch (e) {
+      console.error('Error toggling category:', e);
+    }
+  };
+
+  const handleToggleSponsored = async (id: string, currentVal: boolean) => {
+    try {
+      const { error } = await supabase.from('sponsored_products').update({ is_active: !currentVal }).eq('id', id);
+      if (!error) {
+        setSponsoredProducts(prev => prev.map(s => s.id === id ? { ...s, is_active: !currentVal } : s));
+      }
+    } catch (e) {
+      console.error('Error toggling sponsored status:', e);
+    }
+  };
+
+  // CRUD handlers
+  const handleAddBanner = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newBanner.title || !newBanner.image) return alert('يرجى ملء الحقول المطلوبة!');
+    setBanners([...banners, { ...newBanner, id: 'b-' + Date.now(), active: true }]);
+    setNewBanner({ title: '', image: '', route: '' });
+    setShowAddBannerModal(false);
+    alert('تم إضافة البنر الترويجي بنجاح! 🖼️');
+  };
+
+  const handleDeleteBanner = (id: string) => {
+    if (confirm('هل أنت متأكد من حذف البنر؟')) {
+      setBanners(banners.filter(b => b.id !== id));
+    }
+  };
+
+  const handleAddCoupon = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newCoupon.code || !newCoupon.discount) return alert('يرجى ملء الحقول المطلوبة!');
+    setCoupons([...coupons, { ...newCoupon, active: true }]);
+    setNewCoupon({ code: '', discount: '', minSpend: '' });
+    setShowAddCouponModal(false);
+    alert('تم إضافة الكوبون بنجاح! 🎫');
+  };
+
+  const handleAddReward = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newReward.title) return alert('يرجى كتابة عنوان الجائزة!');
+    setRewards([...rewards, { ...newReward, id: 'r-' + Date.now(), active: true }]);
+    setNewReward({ title: '', cost: 100 });
+    setShowAddRewardModal(false);
+    alert('تم إضافة مكافأة ولاء جديدة! 🏆');
+  };
+
+  const handleSendPush = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!pushTitle || !pushBody) return alert('يرجى ملء العنوان ونص الإشعار!');
+    
+    // Write to supabase notifications if available
+    supabase.from('notifications').insert({
+      title: pushTitle,
+      description: pushBody,
+      type: 'promo',
+      created_at: new Date().toISOString(),
+      read: false,
+      unread: true
+    }).then();
+
+    setPushLogs([{ id: 'p-' + Date.now(), title: pushTitle, body: pushBody, sentAt: new Date().toLocaleString('ar-EG') }, ...pushLogs]);
+    setPushTitle('');
+    setPushBody('');
+    alert('تم إرسال الإشعار الفوري لجميع الهواتف النشطة بنجاح! 🚀');
+  };
+
+  const toggleGroup = (groupId: string) => {
+    setCollapsedGroups(prev => ({ ...prev, [groupId]: !prev[groupId] }));
+  };
+
+  // Groups and sub-items list
+  const sidebarGroups: SidebarGroup[] = [
+    {
+      id: 'overview',
+      title: 'A. نظرة عامة',
+      items: [
+        { id: 'admin_home', label: 'الرئيسية', icon: Home },
+        { id: 'admin_notifications', label: 'التنبيهات والطلبات المعلقة', icon: Bell },
+        { id: 'admin_kpis', label: 'مؤشرات الأداء التشغيلية', icon: Activity }
+      ]
+    },
+    {
+      id: 'app_management',
+      title: 'B. إدارة التطبيق',
+      items: [
+        { id: 'admin_app_homepage', label: 'الصفحة الرئيسية للتطبيق', icon: Smartphone },
+        { id: 'admin_banners', label: 'البنرات الإعلانية', icon: ImageIcon },
+        { id: 'admin_sections', label: 'ترتيب وتفعيل الأقسام', icon: Layout },
+        { id: 'admin_categories', label: 'الفئات والتصنيفات', icon: Grid },
+        { id: 'admin_stories', label: 'ستوريهات الشركاء', icon: Play },
+        { id: 'admin_sponsored_products', label: 'المنتجات الممولة والترويج', icon: Sparkles },
+        { id: 'admin_flash_offers', label: 'عروض الفلاش اليومية', icon: Zap },
+        { id: 'admin_coupons', label: 'كوبونات الخصم', icon: Ticket },
+        { id: 'admin_push_notifications', label: 'إرسال إشعارات الدفع Push', icon: Send },
+        { id: 'admin_rewards', label: 'نقاط ومكافآت الولاء', icon: Award }
+      ]
+    },
+    {
+      id: 'partners_management',
+      title: 'C. إدارة الشركاء',
+      items: [
+        { id: 'admin_partners', label: 'دليل الشركاء المعتمدين', icon: UsersRound },
+        { id: 'admin_partner_join_requests', label: 'طلبات الانضمام والتراخيص', icon: UserPlus },
+        { id: 'admin_partner_products', label: 'المنتجات والخدمات التابعة', icon: PackageOpen },
+        { id: 'admin_partner_offers', label: 'عروض وتخفيضات الشركاء', icon: Tag },
+        { id: 'admin_partner_campaigns', label: 'حملات الشركاء التسويقية', icon: Percent },
+        { id: 'admin_partner_ratings', label: 'تقييمات الشركاء ومراجعاتهم', icon: Star }
+      ]
+    },
+    {
+      id: 'orders_operation',
+      title: 'D. الطلبات والتشغيل',
+      items: [
+        { id: 'admin_orders_all', label: 'كل طلبات المنصة', icon: ShoppingCart },
+        { id: 'admin_orders_active', label: 'الطلبات الجارية والنشطة', icon: Clock },
+        { id: 'admin_direct_delivery', label: 'التوصيل المباشر Dispatch', icon: Truck },
+        { id: 'admin_drivers', label: 'دليل مناديب التوصيل', icon: UserCheck },
+        { id: 'admin_order_tracking', label: 'خريطة التتبع المباشر GPS', icon: MapPin },
+        { id: 'admin_issues_delays', label: 'مشاكل الشحن والتأخير', icon: AlertTriangle }
+      ]
+    },
+    {
+      id: 'customers',
+      title: 'E. العملاء',
+      items: [
+        { id: 'admin_customers', label: 'دليل العملاء المسجلين', icon: Users },
+        { id: 'admin_favorites', label: 'المنتجات الأكثر تفضيلاً', icon: Heart },
+        { id: 'admin_wallets', label: 'إدارة المحافظ والرصيد', icon: Wallet },
+        { id: 'admin_complaints', label: 'شكاوى واعتراضات العملاء', icon: MessageSquare }
+      ]
+    },
+    {
+      id: 'reports',
+      title: 'F. التقارير والتحليلات',
+      items: [
+        { id: 'admin_reports_orders', label: 'تقارير المبيعات والطلبات', icon: FileText },
+        { id: 'admin_reports_campaigns', label: 'تقارير نجاح الحملات الممولة', icon: BarChart },
+        { id: 'admin_reports_partners', label: 'تقارير مبيعات الشركاء', icon: BarChart },
+        { id: 'admin_reports_drivers', label: 'تقارير أداء ومستحقات المناديب', icon: BarChart },
+        { id: 'admin_revenue', label: 'صافي الإيرادات والعمولات', icon: Wallet }
+      ]
+    },
+    {
+      id: 'settings',
+      title: 'G. الإعدادات العامة',
+      items: [
+        { id: 'admin_settings_general', label: 'إعدادات النظام العامة', icon: Settings },
+        { id: 'admin_settings_cities', label: 'المدن والمناطق المغطاة', icon: Map },
+        { id: 'admin_settings_permissions', label: 'إدارة أدوار وصلاحيات المدراء', icon: Lock },
+        { id: 'admin_settings_audit_logs', label: 'سجل سجل العمليات Audit Logs', icon: ClipboardList }
+      ]
+    }
+  ];
 
   return (
     <div style={{ background: '#120b1f', minHeight: '100vh', color: 'white', display: 'flex', fontFamily: 'Cairo, sans-serif', direction: 'rtl' }}>
       
       {/* Sidebar Navigation */}
       {!hideSidebar && (
-        <aside style={{ width: '260px', background: 'rgba(26,11,46,0.95)', borderLeft: '1px solid var(--glass-border-highlight)', padding: '24px', display: 'flex', flexDirection: 'column', gap: 8 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, paddingBottom: 20, marginBottom: 12, borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+        <aside style={{ width: '280px', flexShrink: 0, background: 'rgba(26,11,46,0.95)', borderLeft: '1px solid var(--glass-border-highlight)', padding: '20px 14px', display: 'flex', flexDirection: 'column', gap: 10, height: '100vh', position: 'sticky', top: 0, overflowY: 'auto' }} className="no-scrollbar">
+          
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, paddingBottom: 16, marginBottom: 8, borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
             <div style={{ width: 36, height: 36, borderRadius: 10, background: 'var(--color-accent)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <ShieldCheck size={20} color="white" />
             </div>
-            <span style={{ fontWeight: 900, fontSize: '1.15rem' }}>بوابة الإشراف</span>
+            <div>
+              <span style={{ fontWeight: 900, fontSize: '1rem', display: 'block', color: 'white' }}>منصة الإشراف العليا</span>
+              <span style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)' }}>لوحة التحكم الكلية</span>
+            </div>
           </div>
 
-          {[
-            { id: 'dashboard', label: 'لوحة القيادة 📊' },
-            { id: 'verification', label: 'توثيق الشركاء والمناديب 🏷️' },
-            { id: 'flash_offers', label: 'العروض الممولة والفلاش ⚡' },
-            { id: 'catalogs', label: 'إدارة المنتجات والتصنيفات 🛍️' },
-            { id: 'reports', label: 'الشكاوى والتقارير المرفوعة 📑' },
-            { id: 'settings', label: 'إعدادات المنصة العامة ⚙️' }
-          ].map(item => (
-            <button 
-              key={item.id}
-              onClick={() => setActiveNav(item.id)}
-              style={{
-                width: '100%',
-                padding: '12px 16px',
-                borderRadius: 12,
-                border: 'none',
-                background: activeNav === item.id ? 'var(--color-accent)' : 'transparent',
-                color: 'white',
-                textAlign: 'right',
-                fontWeight: 800,
-                fontSize: '0.85rem',
-                cursor: 'pointer',
-                transition: 'all 0.3s ease'
-              }}
-            >
-              {item.label}
-            </button>
-          ))}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+            {sidebarGroups.map(group => (
+              <div key={group.id} style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                <button 
+                  onClick={() => toggleGroup(group.id)}
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    width: '100%',
+                    padding: '6px 8px',
+                    fontSize: '0.78rem',
+                    fontWeight: 900,
+                    color: 'var(--color-accent-light)',
+                    background: 'rgba(255,255,255,0.01)',
+                    borderRadius: 8,
+                    textAlign: 'right'
+                  }}
+                >
+                  <span>{group.title}</span>
+                  {collapsedGroups[group.id] ? <ChevronDown size={14} /> : <ChevronUp size={14} />}
+                </button>
+
+                {!collapsedGroups[group.id] && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 2, paddingRight: 6, borderRight: '1px solid rgba(255,255,255,0.03)', marginTop: 4 }}>
+                    {group.items.map(item => {
+                      const Icon = item.icon;
+                      const isActive = activeNav === item.id;
+                      return (
+                        <button
+                          key={item.id}
+                          onClick={() => setActiveNav(item.id)}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 10,
+                            width: '100%',
+                            padding: '10px 12px',
+                            borderRadius: 10,
+                            background: isActive ? 'var(--color-accent)' : 'transparent',
+                            color: isActive ? 'white' : 'var(--color-text-main)',
+                            textAlign: 'right',
+                            fontWeight: 800,
+                            fontSize: '0.8rem',
+                            cursor: 'pointer',
+                            transition: 'all 0.2s ease'
+                          }}
+                        >
+                          <Icon size={15} style={{ opacity: isActive ? 1 : 0.6 }} />
+                          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.label}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
 
           {onBack && (
-            <button className="btn btn-secondary" style={{ marginTop: 'auto', width: '100%', color: 'white' }} onClick={onBack}>
-              <ArrowRight size={16} style={{ marginLeft: 8 }} /> العودة للرئيسية
+            <button className="btn btn-secondary" style={{ marginTop: 'auto', width: '100%', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '10px 0', fontSize: '0.82rem', border: '1px solid rgba(255,255,255,0.1)' }} onClick={onBack}>
+              <ArrowRight size={16} /> العودة للبوابات العامة
             </button>
           )}
         </aside>
       )}
 
-      {/* Main Workspace Area */}
-      <main style={{ flex: 1, padding: '30px', overflowY: 'auto' }}>
+      {/* Main Workspace Area & Live Mobile Device Preview wrapper */}
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden' }}>
         
         {/* Top Header */}
-        <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 30 }}>
+        <header style={{ height: '70px', borderBottom: '1px solid rgba(255,255,255,0.05)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0 30px', background: 'rgba(18,11,31,0.5)', backdropFilter: 'blur(10px)', flexShrink: 0 }}>
           <div>
-            <h1 style={{ fontSize: '1.6rem', fontWeight: 900, margin: 0 }}>لوحة الإشراف والمراقبة (Admin Dashboard)</h1>
-            <p style={{ color: 'var(--color-text-muted)', fontSize: '0.84rem', margin: '4px 0 0 0' }}>مراجعة وتوثيق الشركاء، فحص المستندات الرسمية، وتتبع مؤشرات الصحة التشغيلية</p>
+            <h2 style={{ fontSize: '1.25rem', fontWeight: 900, margin: 0 }}>
+              {sidebarGroups.flatMap(g => g.items).find(i => i.id === activeNav)?.label || 'الرئيسية'}
+            </h2>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'rgba(168,85,247,0.1)', border: '1px solid rgba(168,85,247,0.2)', padding: '6px 12px', borderRadius: '30px' }}>
+              <div style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--color-success)', boxShadow: '0 0 8px var(--color-success)' }}></div>
+              <span style={{ fontSize: '0.75rem', fontWeight: 'bold', color: 'var(--color-accent-light)' }}>الوضع التجريبي الذكي (Sandbox Mode)</span>
+            </div>
           </div>
         </header>
 
-        {/* Dashboard Home View */}
-        {activeNav === 'dashboard' && (
-          <div>
-            {/* Quick Metrics */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 20, marginBottom: 30 }}>
-              <div style={{ background: 'var(--glass-bg)', border: '1px solid var(--glass-border)', padding: 20, borderRadius: 16 }}>
-                <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>طلبات انضمام معلقة</span>
-                <h2 style={{ fontSize: '1.8rem', fontWeight: 900, margin: '6px 0 0 0', color: 'var(--color-accent-light)' }}>{partnerApps.filter(p => p.status === 'pending_verification' || p.status === 'pending').length} طلب شريك</h2>
-              </div>
-              <div style={{ background: 'var(--glass-bg)', border: '1px solid var(--glass-border)', padding: 20, borderRadius: 16 }}>
-                <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>سائقين بانتظار التوثيق</span>
-                <h2 style={{ fontSize: '1.8rem', fontWeight: 900, margin: '6px 0 0 0', color: 'var(--color-success)' }}>{driverApps.filter(d => d.status === 'pending').length} مناديب</h2>
-              </div>
-              <div style={{ background: 'var(--glass-bg)', border: '1px solid var(--glass-border)', padding: 20, borderRadius: 16 }}>
-                <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>معدل النجاح التشغيلي</span>
-                <h2 style={{ fontSize: '1.8rem', fontWeight: 900, margin: '6px 0 0 0', color: '#10b981' }}>٩٩.٨٢٪</h2>
-              </div>
-            </div>
-
-            {/* Applications List Mini Overview */}
-            <div style={{ background: 'var(--glass-bg)', border: '1px solid var(--glass-border)', padding: 24, borderRadius: 20 }}>
-              <h3 style={{ fontSize: '1.1rem', fontWeight: 800, marginBottom: 16 }}>طلبات التوثيق الأخيرة الواردة</h3>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                {partnerApps.slice(0, 3).map(app => (
-                  <div key={app.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: 14, background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.04)', borderRadius: 12 }}>
-                    <div>
-                      <strong style={{ display: 'block', fontSize: '0.94rem' }}>{app.business_name}</strong>
-                      <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>{app.commercial_name} • {app.city} • {app.biz_type}</span>
-                    </div>
-                    <div style={{ display: 'flex', gap: 8 }}>
-                      <button className="btn btn-primary" style={{ padding: '6px 12px', fontSize: '0.75rem' }} onClick={() => handleApprovePartner(app.id)}>توثيق واعتماد</button>
-                      <button className="btn btn-secondary" style={{ padding: '6px 12px', fontSize: '0.75rem', color: '#ef4444' }} onClick={() => handleRejectPartner(app.id)}>رفض الطلب</button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Verification View */}
-        {activeNav === 'verification' && (
-          <div style={{ background: 'var(--glass-bg)', border: '1px solid var(--glass-border)', padding: 24, borderRadius: 20 }}>
-            <h3 style={{ fontSize: '1.1rem', fontWeight: 800, marginBottom: 20 }}>مراجعة وتوثيق الشركاء ومستندات الانضمام</h3>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-              {partnerApps.length === 0 ? (
-                <div style={{ textAlign: 'center', padding: '40px 0', color: 'var(--color-text-muted)' }}>لا توجد طلبات انضمام حالياً بانتظار المراجعة.</div>
-              ) : (
-                partnerApps.map(app => (
-                  <div key={app.id} style={{ padding: 20, background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: 16 }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
-                      <div>
-                        <h4 style={{ fontSize: '1.15rem', fontWeight: 900, color: 'white', margin: 0 }}>{app.business_name}</h4>
-                        <p style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)', margin: '4px 0 0 0' }}>{app.commercial_name} • {app.phone_number} • {app.city} - {app.district}</p>
-                      </div>
-                      <span style={{ fontSize: '0.75rem', background: app.status === 'verified' ? 'rgba(16,185,129,0.15)' : 'rgba(245,158,11,0.15)', color: app.status === 'verified' ? 'var(--color-success)' : '#f59e0b', padding: '4px 12px', borderRadius: 'var(--radius-pill)', fontWeight: 800 }}>
-                        {app.status === 'verified' ? 'موثق ومعتمد ✅' : 'قيد الانتظار'}
-                      </span>
-                    </div>
-
-                    {/* Documents attachment links */}
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, margin: '14px 0' }}>
-                      <a href={app.cr_document_url} target="_blank" rel="noreferrer" style={{ fontSize: '0.78rem', background: 'rgba(255,255,255,0.04)', color: 'white', padding: '6px 12px', borderRadius: 8, textDecoration: 'none', border: '1px solid rgba(255,255,255,0.08)' }}>📄 السجل التجاري</a>
-                      <a href={app.owner_id_url} target="_blank" rel="noreferrer" style={{ fontSize: '0.78rem', background: 'rgba(255,255,255,0.04)', color: 'white', padding: '6px 12px', borderRadius: 8, textDecoration: 'none', border: '1px solid rgba(255,255,255,0.08)' }}>📄 هوية المالك</a>
-                      <a href={app.vat_certificate_url} target="_blank" rel="noreferrer" style={{ fontSize: '0.78rem', background: 'rgba(255,255,255,0.04)', color: 'white', padding: '6px 12px', borderRadius: 8, textDecoration: 'none', border: '1px solid rgba(255,255,255,0.08)' }}>📄 رخصة البلدية</a>
-                    </div>
-
-                    {app.status !== 'verified' && (
-                      <div style={{ display: 'flex', gap: 10, marginTop: 12 }}>
-                        <button className="btn btn-primary" style={{ padding: '8px 20px', fontSize: '0.8rem' }} onClick={() => handleApprovePartner(app.id)}>الموافقة والتوثيق</button>
-                        <button className="btn btn-secondary" style={{ padding: '8px 20px', fontSize: '0.8rem', color: '#ef4444' }} onClick={() => handleRejectPartner(app.id)}>رفض وانقاص المستندات</button>
-                      </div>
-                    )}
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* Flash Offers View */}
-        {activeNav === 'flash_offers' && (
-          <FlashOffersManager />
-        )}
-
-        {/* Catalogs View */}
-        {activeNav === 'catalogs' && (
-          <CatalogsManager />
-        )}
-      </main>
-    </div>
-  );
-};
-
-// --- Premium Categories & Catalogs Manager Component ---
-const CatalogsManager = () => {
-  const [categories, setCategories] = useState<any[]>([]);
-  const [loading, setLoading] = useState(false);
-
-  const fetchCategories = async () => {
-    try {
-      setLoading(true);
-      const { data, error } = await supabase
-        .from('categories')
-        .select('*');
-      if (!error && data) {
-        setCategories(data);
-      }
-    } catch (err) {
-      console.error('Error fetching categories:', err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchCategories();
-
-    const channel = supabase.channel('realtime:admin_categories')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'categories' }, () => {
-        fetchCategories();
-      })
-      .subscribe();
-
-    return () => {
-      channel.unsubscribe();
-    };
-  }, []);
-
-  const handleToggleCategory = async (id: string, currentActive: boolean) => {
-    try {
-      const { error } = await supabase
-        .from('categories')
-        .update({ is_active: !currentActive })
-        .eq('id', id);
-      if (!error) {
-        setCategories(prev => prev.map(c => c.id === id ? { ...c, is_active: !currentActive } : c));
-        // Emit dynamic event for same-tab triggers
-        window.dispatchEvent(new CustomEvent('BX_REALTIME_CHANGE', { detail: { table: 'categories' } }));
-      }
-    } catch (err) {
-      console.error('Error toggling category:', err);
-    }
-  };
-
-  return (
-    <div style={{ background: 'var(--glass-bg)', border: '1px solid var(--glass-border)', padding: 24, borderRadius: 20, textAlign: 'right' }}>
-      <h3 style={{ fontSize: '1.2rem', fontWeight: 900, marginBottom: 8, color: 'white' }}>إدارة الفئات والتصنيفات 🛍️</h3>
-      <p style={{ color: 'var(--color-text-muted)', fontSize: '0.8rem', marginBottom: 24 }}>تفعيل أو تعطيل الفئات الرئيسية المعروضة على واجهة العميل الرئيسية ومراقبة حالة المتاجر التابعة.</p>
-
-      {loading && <div style={{ color: 'white', marginBottom: 12 }}>جاري تحميل البيانات...</div>}
-
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16, direction: 'rtl' }}>
-        {categories.map(cat => (
-          <div 
-            key={cat.id} 
-            style={{ 
-              display: 'flex', 
-              justifyContent: 'space-between', 
-              alignItems: 'center', 
-              padding: 16, 
-              background: 'rgba(255,255,255,0.02)', 
-              border: '1px solid ' + (cat.is_active ? 'rgba(168,85,247,0.2)' : 'rgba(255,255,255,0.05)'), 
-              borderRadius: 16,
-              boxShadow: cat.is_active ? '0 4px 15px rgba(168,85,247,0.05)' : 'none'
-            }}
-          >
-            <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-              <div style={{ width: 40, height: 40, borderRadius: 10, background: cat.bg || 'rgba(255,255,255,0.05)', color: cat.color || 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.2rem' }}>
-                {cat.id === 'food' ? '🍗' : cat.id === 'pharmacy' ? '💊' : cat.id === 'supermarket' ? '🛒' : cat.id === 'agency' ? '📢' : cat.id === 'print' ? '🖨️' : cat.id === 'flowers' ? '🎁' : cat.id === 'craftsman' ? '🛠️' : '🏠'}
-              </div>
-              <div>
-                <strong style={{ display: 'block', fontSize: '0.9rem', color: 'white' }}>{cat.name}</strong>
-                <span style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)' }}>المسار: customer-home</span>
-              </div>
-            </div>
-            
-            <button 
-              onClick={() => handleToggleCategory(cat.id, cat.is_active)}
-              style={{
-                background: cat.is_active ? 'rgba(16,185,129,0.15)' : 'rgba(239,68,68,0.15)',
-                border: 'none',
-                color: cat.is_active ? 'var(--color-success)' : '#ef4444',
-                padding: '6px 12px',
-                borderRadius: 8,
-                fontSize: '0.75rem',
-                fontWeight: 900,
-                cursor: 'pointer',
-                transition: 'all 0.2s ease'
-              }}
-            >
-              {cat.is_active ? 'نشطة ومتوفرة 🟢' : 'معطلة ومخفية 🔴'}
-            </button>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-};
-
-// --- Premium Sponsored & Flash Offers Campaign Manager Dashboard Component ---
-// --- Premium Sponsored & Flash Offers Campaign Manager Dashboard Component ---
-const FlashOffersManager = () => {
-  const [offers, setOffers] = useState<any[]>([]);
-
-  const [title, setTitle] = useState('');
-  const [partner, setPartner] = useState('مطعم البيك الرواد');
-  const [discount, setDiscount] = useState(40);
-  const [duration, setDuration] = useState(6);
-  const [priority, setPriority] = useState(1);
-  const [imageUrl, setImageUrl] = useState('https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=400&q=80');
-
-  const fetchOffers = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('sponsored_products')
-        .select('*');
-      if (!error && data) {
-        // Map table fields to local representation
-        const mapped = data.map((o: any) => ({
-          id: o.id,
-          title: o.title,
-          partner: o.store_name || o.sponsored_by,
-          discount: o.discount_percent || 40,
-          duration: 6,
-          priority: 1,
-          is_active: o.is_active
-        }));
-        setOffers(mapped);
-      }
-    } catch (err) {
-      console.error('Error fetching sponsored products:', err);
-    }
-  };
-
-  useEffect(() => {
-    fetchOffers();
-
-    const channel = supabase.channel('realtime:admin_sponsored_products')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'sponsored_products' }, () => {
-        fetchOffers();
-      })
-      .subscribe();
-
-    return () => {
-      channel.unsubscribe();
-    };
-  }, []);
-
-  const handleCreateOffer = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!title) return alert('الرجاء كتابة عنوان العرض الفلاش!');
-    
-    try {
-      const storeLogo = partner.includes('النهدي') ? '💊' : (partner.includes('التميمي') ? '🍏' : '🍔');
-      const storeName = partner;
-      const oldPrice = 50.00;
-      const newPrice = Number((50.00 * (1 - discount / 100)).toFixed(2));
-      
-      const newOffer = {
-        id: 'sp-' + Date.now().toString().substring(8),
-        title,
-        store_name: storeName,
-        store_logo: storeLogo,
-        image_url: imageUrl,
-        old_price: oldPrice,
-        new_price: newPrice,
-        discount_percent: discount,
-        rating: 4.9,
-        is_active: true,
-        expires_at: new Date(Date.now() + 3600000 * duration).toISOString(),
-        is_sponsored: true,
-        sponsored_by: storeName.substring(0, 10),
-        description: title + ' - عرض ممول فلاش مميز للغاية لفترة محدودة.',
-        delivery_time: '١٥-٢٠ دقيقة',
-        images: [imageUrl]
-      };
-
-      const { error } = await supabase.from('sponsored_products').insert(newOffer);
-      if (!error) {
-        setTitle('');
-        alert('تم إنشاء ونشر حملة العرض الممول الفلاش بنجاح! ⚡');
-        fetchOffers();
-      } else {
-        throw error;
-      }
-    } catch (err: any) {
-      alert('حدث خطأ أثناء الإنشاء: ' + err.message);
-    }
-  };
-
-  const handleToggleOffer = async (id: string) => {
-    const offer = offers.find(o => o.id === id);
-    if (!offer) return;
-    try {
-      const nextActive = !offer.is_active;
-      const { error } = await supabase
-        .from('sponsored_products')
-        .update({ is_active: nextActive })
-        .eq('id', id);
-      if (!error) {
-        setOffers(prev => prev.map(o => o.id === id ? { ...o, is_active: nextActive } : o));
-      }
-    } catch (err) {
-      console.error('Error toggling offer:', err);
-    }
-  };
-
-  const handleDeleteOffer = async (id: string) => {
-    try {
-      const { error } = await supabase
-        .from('sponsored_products')
-        .delete()
-        .eq('id', id);
-      if (!error) {
-        setOffers(prev => prev.filter(o => o.id !== id));
-        alert('تم حذف حملة العرض الممول بنجاح.');
-      }
-    } catch (err) {
-      console.error('Error deleting offer:', err);
-    }
-  };
-
-  return (
-    <div style={{ background: 'var(--glass-bg)', border: '1px solid var(--glass-border)', padding: 24, borderRadius: 20, textAlign: 'right' }}>
-      <h3 style={{ fontSize: '1.2rem', fontWeight: 900, marginBottom: 8, color: 'white' }}>إدارة حملات العروض الممولة والفلاش ⚡</h3>
-      <p style={{ color: 'var(--color-text-muted)', fontSize: '0.8rem', marginBottom: 24 }}>قم بجدولة ونشر عروض الفلاش اليومية المحددة بالوقت والتحكم في إضافاتها ومتغيراتها الفورية</p>
-
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24, direction: 'rtl' }}>
-        {/* Form Creator */}
-        <form onSubmit={handleCreateOffer} style={{ display: 'flex', flexDirection: 'column', gap: 14, background: 'rgba(255,255,255,0.01)', border: '1px solid rgba(255,255,255,0.03)', padding: 18, borderRadius: 16 }}>
-          <h4 style={{ fontSize: '0.94rem', fontWeight: 800, margin: 0 }}>إنشاء حملة عروض فلاش ممولة جديدة</h4>
+        {/* Workspace Body */}
+        <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
           
-          <div>
-            <label style={{ fontSize: '0.78rem', color: 'var(--color-text-muted)', display: 'block', marginBottom: 6 }}>عنوان العرض الفوري</label>
-            <input 
-              type="text" 
-              placeholder="مثال: خصم ٤٠٪ على وجبة مسحب البيك"
-              value={title}
-              onChange={e => setTitle(e.target.value)}
-              style={{ width: '100%', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 10, padding: 10, color: 'white', outline: 'none', fontSize: '0.85rem', fontFamily: 'Cairo, sans-serif' }}
-            />
-          </div>
-
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-            <div>
-              <label style={{ fontSize: '0.78rem', color: 'var(--color-text-muted)', display: 'block', marginBottom: 6 }}>المتجر الشريك</label>
-              <select 
-                value={partner}
-                onChange={e => setPartner(e.target.value)}
-                style={{ width: '100%', background: '#1a112d', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 10, padding: 10, color: 'white', outline: 'none', fontSize: '0.82rem', fontFamily: 'Cairo, sans-serif' }}
-              >
-                <option value="مطعم البيك الرواد">مطعم البيك الرواد</option>
-                <option value="صيدلية النهدي الياسمين">صيدلية النهدي الياسمين</option>
-                <option value="أسواق التميمي الملقا">أسواق التميمي الملقا</option>
-              </select>
-            </div>
-            <div>
-              <label style={{ fontSize: '0.78rem', color: 'var(--color-text-muted)', display: 'block', marginBottom: 6 }}>رابط صورة المنتج الترويجي</label>
-              <input 
-                type="text" 
-                value={imageUrl}
-                onChange={e => setImageUrl(e.target.value)}
-                style={{ width: '100%', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 10, padding: 10, color: 'white', outline: 'none', fontSize: '0.82rem', fontFamily: 'Cairo, sans-serif' }}
-              />
-            </div>
-          </div>
-
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
-            <div>
-              <label style={{ fontSize: '0.78rem', color: 'var(--color-text-muted)', display: 'block', marginBottom: 6 }}>نسبة الخصم (%)</label>
-              <input 
-                type="number" 
-                value={discount}
-                onChange={e => setDiscount(Number(e.target.value))}
-                style={{ width: '100%', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 10, padding: 10, color: 'white', outline: 'none', fontSize: '0.85rem' }}
-              />
-            </div>
-            <div>
-              <label style={{ fontSize: '0.78rem', color: 'var(--color-text-muted)', display: 'block', marginBottom: 6 }}>المدة بالساعات</label>
-              <input 
-                type="number" 
-                value={duration}
-                onChange={e => setDuration(Number(e.target.value))}
-                style={{ width: '100%', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 10, padding: 10, color: 'white', outline: 'none', fontSize: '0.85rem' }}
-              />
-            </div>
-            <div>
-              <label style={{ fontSize: '0.78rem', color: 'var(--color-text-muted)', display: 'block', marginBottom: 6 }}>أولوية العرض</label>
-              <input 
-                type="number" 
-                value={priority}
-                onChange={e => setPriority(Number(e.target.value))}
-                style={{ width: '100%', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 10, padding: 10, color: 'white', outline: 'none', fontSize: '0.85rem' }}
-              />
-            </div>
-          </div>
-
-          <button type="submit" className="btn btn-primary" style={{ width: '100%', padding: '12px', borderRadius: 10, fontWeight: 900, marginTop: 10 }}>
-            نشر وجدولة العرض الفوري 🚀
-          </button>
-        </form>
-
-        {/* Active Campaigns List */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-          <h4 style={{ fontSize: '0.94rem', fontWeight: 800, margin: 0 }}>الحملات النشطة الحالية ({offers.length})</h4>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10, maxHeight: '380px', overflowY: 'auto' }} className="no-scrollbar">
-            {offers.map(o => (
-              <div key={o.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: 14, background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: 12 }}>
-                <div>
-                  <strong style={{ display: 'block', fontSize: '0.86rem', color: 'white' }}>{o.title}</strong>
-                  <span style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)' }}>{o.partner} • خصم {o.discount}% • الأولوية: {o.priority}</span>
+          {/* Active view workspace */}
+          <main style={{ flex: 1, padding: '24px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 20 }}>
+            
+            {/* SEARCH & FILTER GENERAL COMPONENT (Appears on directories) */}
+            {['admin_partners', 'admin_partner_products', 'admin_drivers', 'admin_orders_all', 'admin_customers'].includes(activeNav) && (
+              <div style={{ background: 'var(--glass-bg)', border: '1px solid var(--glass-border)', padding: 14, borderRadius: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, minWidth: '240px', background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 10, padding: '6px 12px' }}>
+                  <Search size={16} style={{ color: 'var(--color-text-muted)' }} />
+                  <input 
+                    type="text" 
+                    placeholder="ابحث بالاسم، الرقم، أو المعرف الفريد..." 
+                    value={searchTerm}
+                    onChange={e => setSearchTerm(e.target.value)}
+                    style={{ background: 'transparent', border: 'none', color: 'white', outline: 'none', fontSize: '0.85rem', width: '100%', fontFamily: 'Cairo, sans-serif' }}
+                  />
                 </div>
-                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                  <button 
-                    onClick={() => handleToggleOffer(o.id)}
-                    style={{
-                      background: o.is_active ? 'rgba(16,185,129,0.15)' : 'rgba(255,255,255,0.06)',
-                      border: 'none',
-                      color: o.is_active ? 'var(--color-success)' : '#9ca3af',
-                      padding: '4px 8px',
-                      borderRadius: 8,
-                      fontSize: '0.68rem',
-                      fontWeight: 800,
-                      cursor: 'pointer'
-                    }}
+                <div style={{ display: 'flex', gap: 10 }}>
+                  <select 
+                    value={statusFilter} 
+                    onChange={e => setStatusFilter(e.target.value)}
+                    style={{ background: '#1c0f33', border: '1px solid rgba(255,255,255,0.1)', color: 'white', padding: '8px 14px', borderRadius: 10, fontSize: '0.8rem', fontFamily: 'Cairo' }}
                   >
-                    {o.is_active ? 'نشط 🟢' : 'معطل 🔴'}
-                  </button>
-                  <button 
-                    onClick={() => handleDeleteOffer(o.id)}
-                    style={{
-                      background: 'rgba(239,68,68,0.1)',
-                      border: 'none',
-                      color: '#ef4444',
-                      padding: '4px 8px',
-                      borderRadius: 8,
-                      fontSize: '0.68rem',
-                      fontWeight: 800,
-                      cursor: 'pointer'
-                    }}
-                  >
-                    حذف
-                  </button>
+                    <option value="all">جميع الحالات</option>
+                    <option value="active">نشط / موثق</option>
+                    <option value="pending">معلق / قيد المراجعة</option>
+                  </select>
                 </div>
               </div>
-            ))}
+            )}
+
+            {/* TAB VIEW 1: الرئيسية */}
+            {activeNav === 'admin_home' && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+                {/* Stats Grid */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 16 }}>
+                  <div style={{ background: 'var(--glass-bg)', border: '1px solid var(--glass-border)', padding: 18, borderRadius: 16 }}>
+                    <span style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)' }}>إجمالي مبيعات اليوم</span>
+                    <h3 style={{ fontSize: '1.5rem', fontWeight: 900, margin: '6px 0 0 0', color: 'white' }}>٣,٤٥٦.٠٠ ر.س</h3>
+                    <span style={{ fontSize: '0.65rem', color: 'var(--color-success)' }}>📈 +١٢.٤٪ عن الأمس</span>
+                  </div>
+                  <div style={{ background: 'var(--glass-bg)', border: '1px solid var(--glass-border)', padding: 18, borderRadius: 16 }}>
+                    <span style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)' }}>طلبات معلقة بانتظار المراجعة</span>
+                    <h3 style={{ fontSize: '1.5rem', fontWeight: 900, margin: '6px 0 0 0', color: '#f59e0b' }}>
+                      {partnerApps.filter(p => p.status === 'pending').length + driverApps.filter(d => d.status === 'pending').length} طلب انضمام
+                    </h3>
+                    <span style={{ fontSize: '0.65rem', color: 'var(--color-text-muted)' }}>تحتاج توثيق ومراجعة التراخيص</span>
+                  </div>
+                  <div style={{ background: 'var(--glass-bg)', border: '1px solid var(--glass-border)', padding: 18, borderRadius: 16 }}>
+                    <span style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)' }}>مناديب التوصيل المتصلين GPS</span>
+                    <h3 style={{ fontSize: '1.5rem', fontWeight: 900, margin: '6px 0 0 0', color: 'var(--color-success)' }}>١٤ مندوب</h3>
+                    <span style={{ fontSize: '0.65rem', color: 'var(--color-success)' }}>🟢 متصل ونشط لحظياً</span>
+                  </div>
+                  <div style={{ background: 'var(--glass-bg)', border: '1px solid var(--glass-border)', padding: 18, borderRadius: 16 }}>
+                    <span style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)' }}>معدل التقييم العام للمتاجر</span>
+                    <h3 style={{ fontSize: '1.5rem', fontWeight: 900, margin: '6px 0 0 0', color: '#fbbf24' }}>٤.٨ ★</h3>
+                    <span style={{ fontSize: '0.65rem', color: 'var(--color-text-muted)' }}>بناءً على ٨,٤٢١ تقييم عملاء</span>
+                  </div>
+                </div>
+
+                {/* Operations & Performance Timeline */}
+                <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 20 }}>
+                  <div style={{ background: 'var(--glass-bg)', border: '1px solid var(--glass-border)', padding: 20, borderRadius: 20 }}>
+                    <h3 style={{ fontSize: '1rem', fontWeight: 800, marginBottom: 16 }}>نشاط المبيعات وحركة الطلبات الجارية</h3>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                      {orders.slice(0, 4).map(o => (
+                        <div key={o.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: 12, background: 'rgba(255,255,255,0.01)', border: '1px solid rgba(255,255,255,0.03)', borderRadius: 12 }}>
+                          <div>
+                            <strong style={{ fontSize: '0.85rem', display: 'block' }}>طلب رقم #{o.id?.substring(0, 8)}</strong>
+                            <span style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)' }}>العميل: {o.customer_name} • {o.dropoff_location?.substring(0, 25)}...</span>
+                          </div>
+                          <span style={{ fontSize: '0.72rem', background: 'rgba(168,85,247,0.15)', color: 'var(--color-accent-light)', padding: '4px 10px', borderRadius: 8, fontWeight: 900 }}>
+                            {o.status}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div style={{ background: 'var(--glass-bg)', border: '1px solid var(--glass-border)', padding: 20, borderRadius: 20 }}>
+                    <h3 style={{ fontSize: '1rem', fontWeight: 800, marginBottom: 16 }}>المهام التشغيلية العاجلة</h3>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                      <div style={{ padding: 12, background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.2)', borderRadius: 12, fontSize: '0.75rem' }}>
+                        ⚠️ هناك <strong>{partnerApps.filter(p => p.status === 'pending').length} طلب شريك جديد</strong> معلق بانتظار تدقيق السجل التجاري والتراخيص.
+                      </div>
+                      <div style={{ padding: 12, background: 'rgba(168,85,247,0.08)', border: '1px solid rgba(168,85,247,0.2)', borderRadius: 12, fontSize: '0.75rem' }}>
+                        ⚡ <strong>عرض فلاش مميز</strong> يوشك على الانتهاء بعد ساعتين. راجع أولوية ظهور المنتجات.
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* TAB VIEW 2: التنبيهات والطلبات المعلقة */}
+            {activeNav === 'admin_notifications' && (
+              <div style={{ background: 'var(--glass-bg)', border: '1px solid var(--glass-border)', padding: 20, borderRadius: 20 }}>
+                <h3 style={{ fontSize: '1rem', fontWeight: 800, marginBottom: 16 }}>طلبات الانضمام والتراخيص الرسمية المعلقة</h3>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                  {partnerApps.filter(p => p.status === 'pending').map(app => (
+                    <div key={app.id} style={{ padding: 16, background: 'rgba(255,255,255,0.01)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: 14, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <div>
+                        <strong style={{ fontSize: '0.9rem' }}>{app.business_name}</strong>
+                        <p style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', margin: '4px 0 0 0' }}>{app.commercial_name} • {app.phone_number} • {app.city}</p>
+                      </div>
+                      <div style={{ display: 'flex', gap: 8 }}>
+                        <button className="btn btn-primary" style={{ padding: '6px 12px', fontSize: '0.75rem' }} onClick={() => handleApprovePartner(app.id)}>توثيق واعتماد</button>
+                        <button className="btn btn-secondary" style={{ padding: '6px 12px', fontSize: '0.75rem', color: '#ef4444' }} onClick={() => handleRejectPartner(app.id)}>رفض الطلب</button>
+                      </div>
+                    </div>
+                  ))}
+                  {partnerApps.filter(p => p.status === 'pending').length === 0 && (
+                    <div style={{ textAlign: 'center', padding: '40px 0', color: 'var(--color-text-muted)', fontSize: '0.85rem' }}>لا توجد طلبات انضمام شركاء معلقة حالياً. 👌</div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* TAB VIEW 3: مؤشرات الأداء التشغيلية */}
+            {activeNav === 'admin_kpis' && (
+              <div style={{ background: 'var(--glass-bg)', border: '1px solid var(--glass-border)', padding: 20, borderRadius: 20 }}>
+                <h3 style={{ fontSize: '1rem', fontWeight: 800, marginBottom: 16 }}>مؤشرات الأداء التشغيلية والخدمية (KPIs)</h3>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16 }}>
+                  <div style={{ background: 'rgba(255,255,255,0.01)', border: '1px solid rgba(255,255,255,0.04)', padding: 16, borderRadius: 14 }}>
+                    <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>سرعة استجابة الشركاء للتحضير</span>
+                    <h2 style={{ fontSize: '1.6rem', fontWeight: 900, color: 'white', margin: '4px 0 0 0' }}>٤.٢ دقيقة</h2>
+                  </div>
+                  <div style={{ background: 'rgba(255,255,255,0.01)', border: '1px solid rgba(255,255,255,0.04)', padding: 16, borderRadius: 14 }}>
+                    <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>متوسط زمن رحلة التوصيل الكلي</span>
+                    <h2 style={{ fontSize: '1.6rem', fontWeight: 900, color: 'white', margin: '4px 0 0 0' }}>١٨.٥ دقيقة</h2>
+                  </div>
+                  <div style={{ background: 'rgba(255,255,255,0.01)', border: '1px solid rgba(255,255,255,0.04)', padding: 16, borderRadius: 14 }}>
+                    <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>معدل التوصيل الناجح في أول محاولة</span>
+                    <h2 style={{ fontSize: '1.6rem', fontWeight: 900, color: '#10b981', margin: '4px 0 0 0' }}>٩٩.٨٢٪</h2>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* TAB VIEW 4: الصفحة الرئيسية للتطبيق */}
+            {activeNav === 'admin_app_homepage' && (
+              <div style={{ background: 'var(--glass-bg)', border: '1px solid var(--glass-border)', padding: 20, borderRadius: 20 }}>
+                <h3 style={{ fontSize: '1rem', fontWeight: 800, marginBottom: 12 }}>التحكم بالصفحة الرئيسية للتطبيق وحالة ظهورها</h3>
+                <p style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)', marginBottom: 20 }}>قم بتمكين أو تعطيل المكونات الرئيسية للتطبيق لحظياً للتعديل على تجربة المستخدم.</p>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: 14, background: 'rgba(255,255,255,0.01)', border: '1px solid rgba(255,255,255,0.04)', borderRadius: 12 }}>
+                    <div>
+                      <strong>قسم البنرات الإعلانية الدوارة (Carousel Banners)</strong>
+                      <span style={{ display: 'block', fontSize: '0.72rem', color: 'var(--color-text-muted)' }}>العروض المتحركة أعلى الصفحة الرئيسية.</span>
+                    </div>
+                    <button className="btn btn-primary" style={{ padding: '6px 14px', fontSize: '0.75rem' }}>نشط ومتوفر</button>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: 14, background: 'rgba(255,255,255,0.01)', border: '1px solid rgba(255,255,255,0.04)', borderRadius: 12 }}>
+                    <div>
+                      <strong>قسم الستوريهات الترويجية (Stories Slider)</strong>
+                      <span style={{ display: 'block', fontSize: '0.72rem', color: 'var(--color-text-muted)' }}>قصص وعروض الشركاء المصورة بنمط الإنستغرام.</span>
+                    </div>
+                    <button className="btn btn-primary" style={{ padding: '6px 14px', fontSize: '0.75rem' }}>نشط ومتوفر</button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* TAB VIEW 5: البنرات الإعلانية */}
+            {activeNav === 'admin_banners' && (
+              <div style={{ background: 'var(--glass-bg)', border: '1px solid var(--glass-border)', padding: 20, borderRadius: 20 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+                  <h3 style={{ fontSize: '1rem', fontWeight: 800, margin: 0 }}>إدارة البنرات الإعلانية الترويجية (Banners)</h3>
+                  <button className="btn btn-primary" onClick={() => setShowAddBannerModal(true)} style={{ display: 'flex', gap: 8, alignItems: 'center', padding: '8px 16px', fontSize: '0.78rem' }}>
+                    <Plus size={16} /> إضافة بنر ترويجي جديد
+                  </button>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>
+                  {banners.map(b => (
+                    <div key={b.id} style={{ background: 'rgba(255,255,255,0.01)', border: '1px solid rgba(255,255,255,0.04)', borderRadius: 16, overflow: 'hidden' }}>
+                      <img src={b.image} alt={b.title} style={{ width: '100%', height: '140px', objectFit: 'cover' }} />
+                      <div style={{ padding: 14 }}>
+                        <strong style={{ fontSize: '0.85rem', display: 'block', marginBottom: 4 }}>{b.title}</strong>
+                        <span style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)', display: 'block', marginBottom: 12 }}>المسار التوجيهي: {b.route}</span>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <button 
+                            onClick={() => {
+                              setBanners(banners.map(x => x.id === b.id ? { ...x, active: !x.active } : x));
+                              alert('تم تحديث حالة البنر بنجاح.');
+                            }}
+                            className={`btn ${b.active ? 'btn-primary' : 'btn-secondary'}`} 
+                            style={{ padding: '4px 10px', fontSize: '0.72rem' }}
+                          >
+                            {b.active ? 'نشط وظاهر 🟢' : 'معطل ومخفي 🔴'}
+                          </button>
+                          <button className="btn btn-secondary text-danger" style={{ padding: '6px', minWidth: 'auto', background: 'transparent' }} onClick={() => handleDeleteBanner(b.id)}>
+                            <Trash2 size={16} />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* TAB VIEW 6: ترتيب وتفعيل الأقسام */}
+            {activeNav === 'admin_sections' && (
+              <div style={{ background: 'var(--glass-bg)', border: '1px solid var(--glass-border)', padding: 20, borderRadius: 20 }}>
+                <h3 style={{ fontSize: '1rem', fontWeight: 800, marginBottom: 16 }}>ترتيب وحالة تفعيل أقسام الصفحة الرئيسية</h3>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                  {sections.sort((a,b) => a.order - b.order).map(sec => (
+                    <div key={sec.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: 14, background: 'rgba(255,255,255,0.01)', border: '1px solid rgba(255,255,255,0.04)', borderRadius: 12 }}>
+                      <div>
+                        <strong style={{ fontSize: '0.85rem' }}>{sec.name}</strong>
+                        <span style={{ display: 'block', fontSize: '0.7rem', color: 'var(--color-text-muted)', marginTop: 2 }}>الترتيب السلسلي: {sec.order}</span>
+                      </div>
+                      <div style={{ display: 'flex', gap: 10 }}>
+                        <button 
+                          onClick={() => {
+                            setSections(sections.map(x => x.id === sec.id ? { ...x, active: !x.active } : x));
+                            alert('تم تعديل حالة تفعيل القسم.');
+                          }}
+                          className={`btn ${sec.active ? 'btn-primary' : 'btn-secondary'}`}
+                          style={{ padding: '6px 12px', fontSize: '0.72rem' }}
+                        >
+                          {sec.active ? 'نشط' : 'معطل'}
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* TAB VIEW 7: الفئات والتصنيفات */}
+            {activeNav === 'admin_categories' && (
+              <div style={{ background: 'var(--glass-bg)', border: '1px solid var(--glass-border)', padding: 20, borderRadius: 20 }}>
+                <h3 style={{ fontSize: '1rem', fontWeight: 800, marginBottom: 16 }}>إدارة الفئات والتصنيفات الرئيسية بالتطبيق</h3>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 14 }}>
+                  {categories.map(cat => (
+                    <div key={cat.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: 14, background: 'rgba(255,255,255,0.01)', border: '1px solid rgba(255,255,255,0.04)', borderRadius: 12 }}>
+                      <div>
+                        <strong style={{ fontSize: '0.9rem' }}>{cat.name}</strong>
+                        <span style={{ display: 'block', fontSize: '0.7rem', color: 'var(--color-text-muted)' }}>المعرف الفريد: {cat.id}</span>
+                      </div>
+                      <button 
+                        onClick={() => handleToggleCategory(cat.id, cat.is_active)}
+                        className={`btn ${cat.is_active ? 'btn-primary' : 'btn-secondary'}`}
+                        style={{ padding: '6px 12px', fontSize: '0.72rem' }}
+                      >
+                        {cat.is_active ? 'نشطة ومتوفرة' : 'معطلة'}
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* TAB VIEW 8: ستوريهات الشركاء */}
+            {activeNav === 'admin_stories' && (
+              <div style={{ background: 'var(--glass-bg)', border: '1px solid var(--glass-border)', padding: 20, borderRadius: 20 }}>
+                <h3 style={{ fontSize: '1rem', fontWeight: 800, marginBottom: 16 }}>طلبات نشر الستوريهات والقصص المصورة الشريكة</h3>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 16 }}>
+                  {stories.map(st => (
+                    <div key={st.id} style={{ background: 'rgba(255,255,255,0.01)', border: '1px solid rgba(255,255,255,0.04)', borderRadius: 16, overflow: 'hidden' }}>
+                      <img src={st.image} alt={st.store} style={{ width: '100%', height: '180px', objectFit: 'cover' }} />
+                      <div style={{ padding: 14 }}>
+                        <strong style={{ fontSize: '0.85rem', display: 'block', marginBottom: 4 }}>{st.store}</strong>
+                        <p style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', margin: '0 0 12px 0' }}>{st.content}</p>
+                        <div style={{ display: 'flex', gap: 8 }}>
+                          {!st.approved ? (
+                            <>
+                              <button 
+                                onClick={() => {
+                                  setStories(stories.map(x => x.id === st.id ? { ...x, approved: true } : x));
+                                  alert('تم اعتماد ونشر الستوري للشريك بنجاح! 🎉');
+                                }}
+                                className="btn btn-primary" 
+                                style={{ padding: '6px 12px', fontSize: '0.72rem', flex: 1 }}
+                              >
+                                اعتماد ونشر
+                              </button>
+                              <button 
+                                onClick={() => {
+                                  setStories(stories.filter(x => x.id !== st.id));
+                                  alert('تم رفض وحذف طلب الستوري.');
+                                }}
+                                className="btn btn-secondary" 
+                                style={{ padding: '6px 12px', fontSize: '0.72rem', color: '#ef4444' }}
+                              >
+                                رفض
+                              </button>
+                            </>
+                          ) : (
+                            <button className="btn btn-secondary" style={{ width: '100%', fontSize: '0.72rem', pointerEvents: 'none' }}>
+                              معتمد ومنشور حالياً ✅
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* TAB VIEW 9: المنتجات الممولة والترويج */}
+            {activeNav === 'admin_sponsored_products' && (
+              <div style={{ background: 'var(--glass-bg)', border: '1px solid var(--glass-border)', padding: 20, borderRadius: 20 }}>
+                <h3 style={{ fontSize: '1rem', fontWeight: 800, marginBottom: 16 }}>المنتجات الممولة وحملات الإعلان المعتمدة</h3>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 14 }}>
+                  {sponsoredProducts.map(sp => (
+                    <div key={sp.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: 14, background: 'rgba(255,255,255,0.01)', border: '1px solid rgba(255,255,255,0.04)', borderRadius: 12 }}>
+                      <div>
+                        <strong style={{ fontSize: '0.85rem', display: 'block' }}>{sp.title}</strong>
+                        <span style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)' }}>المعلن: {sp.store_name || sp.sponsored_by}</span>
+                      </div>
+                      <button 
+                        onClick={() => handleToggleSponsored(sp.id, sp.is_active)}
+                        className={`btn ${sp.is_active ? 'btn-primary' : 'btn-secondary'}`}
+                        style={{ padding: '6px 12px', fontSize: '0.72rem' }}
+                      >
+                        {sp.is_active ? 'نشط ومعروض' : 'معطل'}
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* TAB VIEW 10: عروض الفلاش اليومية */}
+            {activeNav === 'admin_flash_offers' && (
+              <div style={{ background: 'var(--glass-bg)', border: '1px solid var(--glass-border)', padding: 20, borderRadius: 20 }}>
+                <h3 style={{ fontSize: '1rem', fontWeight: 800, marginBottom: 16 }}>عروض الفلاش العاجلة والنشطة حالياً</h3>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 14 }}>
+                  {sponsoredProducts.filter(x => x.discount_percent >= 30).map(offer => (
+                    <div key={offer.id} style={{ padding: 14, background: 'rgba(255,255,255,0.01)', border: '1px solid rgba(168,85,247,0.2)', borderRadius: 14 }}>
+                      <strong style={{ fontSize: '0.85rem', display: 'block', marginBottom: 2 }}>{offer.title}</strong>
+                      <span style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)', display: 'block', marginBottom: 8 }}>المتجر: {offer.store_name} • خصم {offer.discount_percent}%</span>
+                      <button className="btn btn-primary" style={{ padding: '4px 10px', fontSize: '0.7rem', pointerEvents: 'none' }}>خصم فلاش نشط ⚡</button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* TAB VIEW 11: كوبونات الخصم */}
+            {activeNav === 'admin_coupons' && (
+              <div style={{ background: 'var(--glass-bg)', border: '1px solid var(--glass-border)', padding: 20, borderRadius: 20 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+                  <h3 style={{ fontSize: '1rem', fontWeight: 800, margin: 0 }}>كوبونات وأكواد الخصم النشطة</h3>
+                  <button className="btn btn-primary" onClick={() => setShowAddCouponModal(true)} style={{ display: 'flex', gap: 8, alignItems: 'center', padding: '8px 16px', fontSize: '0.78rem' }}>
+                    <Plus size={16} /> إضافة كوبون جديد
+                  </button>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 14 }}>
+                  {coupons.map((c, i) => (
+                    <div key={i} style={{ padding: 16, background: 'rgba(255,255,255,0.01)', border: '1px solid rgba(255,255,255,0.04)', borderRadius: 14 }}>
+                      <strong style={{ fontSize: '1rem', color: 'var(--color-accent-light)', display: 'block' }}>{c.code}</strong>
+                      <span style={{ fontSize: '0.75rem', color: 'white', display: 'block', margin: '4px 0' }}>الخصم: {c.discount} • الحد الأدنى: {c.minSpend}</span>
+                      <button 
+                        onClick={() => {
+                          setCoupons(coupons.map((x, idx) => idx === i ? { ...x, active: !x.active } : x));
+                          alert('تم تغيير حالة الكوبون.');
+                        }}
+                        className={`btn ${c.active ? 'btn-primary' : 'btn-secondary'}`}
+                        style={{ padding: '4px 10px', fontSize: '0.7rem', marginTop: 8 }}
+                      >
+                        {c.active ? 'نشط وصالح' : 'معطل'}
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* TAB VIEW 12: إرسال إشعارات الدفع Push */}
+            {activeNav === 'admin_push_notifications' && (
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
+                <form onSubmit={handleSendPush} style={{ background: 'var(--glass-bg)', border: '1px solid var(--glass-border)', padding: 20, borderRadius: 20, display: 'flex', flexDirection: 'column', gap: 14 }}>
+                  <h3 style={{ fontSize: '1rem', fontWeight: 800, margin: 0 }}>إرسال إشعار ترويجي فوري (Push Campaign)</h3>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.78rem', color: 'var(--color-text-muted)', marginBottom: 6 }}>عنوان الإشعار الترويجي</label>
+                    <input type="text" className="input-field" placeholder="مثال: خصم ٥٠٪ على الوجبة المزدوجة اليوم!" value={pushTitle} onChange={e => setPushTitle(e.target.value)} required />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.78rem', color: 'var(--color-text-muted)', marginBottom: 6 }}>نص محتوى الرسالة التنبيهية</label>
+                    <textarea className="textarea-field" style={{ minHeight: 80 }} placeholder="اكتب تفاصيل العرض والخصم الحصري لحث العملاء على الطلب الفوري..." value={pushBody} onChange={e => setPushBody(e.target.value)} required />
+                  </div>
+                  <button type="submit" className="btn btn-primary" style={{ display: 'flex', gap: 8, alignItems: 'center', justifyContent: 'center', padding: 12, fontSize: '0.85rem', fontWeight: 900 }}>
+                    <Send size={16} /> بث وإرسال الإشعار الترويجي لجميع الهواتف
+                  </button>
+                </form>
+
+                <div style={{ background: 'var(--glass-bg)', border: '1px solid var(--glass-border)', padding: 20, borderRadius: 20 }}>
+                  <h3 style={{ fontSize: '1rem', fontWeight: 800, marginBottom: 16 }}>سجل العمليات الإشعارات الترويجية المرسلة ({pushLogs.length})</h3>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10, maxHeight: '280px', overflowY: 'auto' }} className="no-scrollbar">
+                    {pushLogs.map((log, idx) => (
+                      <div key={idx} style={{ padding: 12, background: 'rgba(255,255,255,0.01)', border: '1px solid rgba(255,255,255,0.04)', borderRadius: 10 }}>
+                        <strong style={{ fontSize: '0.82rem', display: 'block' }}>{log.title}</strong>
+                        <p style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', margin: '2px 0' }}>{log.body}</p>
+                        <span style={{ fontSize: '0.62rem', color: 'var(--color-accent-light)' }}>أرسل في: {log.sentAt}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* TAB VIEW 13: نقاط ومكافآت الولاء */}
+            {activeNav === 'admin_rewards' && (
+              <div style={{ background: 'var(--glass-bg)', border: '1px solid var(--glass-border)', padding: 20, borderRadius: 20 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+                  <h3 style={{ fontSize: '1rem', fontWeight: 800, margin: 0 }}>مكافآت الولاء واستبدال النقاط التفاعلية</h3>
+                  <button className="btn btn-primary" onClick={() => setShowAddRewardModal(true)} style={{ display: 'flex', gap: 8, alignItems: 'center', padding: '8px 16px', fontSize: '0.78rem' }}>
+                    <Plus size={16} /> إضافة جائزة ولاء جديدة
+                  </button>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 14 }}>
+                  {rewards.map((r, i) => (
+                    <div key={r.id || i} style={{ padding: 16, background: 'rgba(255,255,255,0.01)', border: '1px solid rgba(255,255,255,0.04)', borderRadius: 14 }}>
+                      <strong style={{ fontSize: '0.92rem', display: 'block' }}>{r.title}</strong>
+                      <span style={{ fontSize: '0.75rem', color: 'var(--color-accent-light)', display: 'block', margin: '4px 0' }}>تكلفة الاسترداد: {r.cost} نقطة</span>
+                      <button 
+                        onClick={() => {
+                          setRewards(rewards.map(x => x.id === r.id ? { ...x, active: !x.active } : x));
+                          alert('تم تغيير حالة المكافأة.');
+                        }}
+                        className={`btn ${r.active ? 'btn-primary' : 'btn-secondary'}`}
+                        style={{ padding: '4px 10px', fontSize: '0.7rem', marginTop: 8 }}
+                      >
+                        {r.active ? 'متوفرة للاستبدال' : 'معطلة'}
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* TAB VIEW 14: دليل الشركاء المعتمدين */}
+            {activeNav === 'admin_partners' && (
+              <div style={{ background: 'var(--glass-bg)', border: '1px solid var(--glass-border)', padding: 20, borderRadius: 20 }}>
+                <h3 style={{ fontSize: '1rem', fontWeight: 800, marginBottom: 16 }}>دليل المتاجر والشركاء المعتمدين بالمنصة</h3>
+                <div style={{ overflowX: 'auto' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'right', fontSize: '0.85rem' }}>
+                    <thead>
+                      <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
+                        <th style={{ padding: '12px' }}>اسم المتجر الشريك</th>
+                        <th style={{ padding: '12px' }}>الفئة والنشاط</th>
+                        <th style={{ padding: '12px' }}>التقييم العام</th>
+                        <th style={{ padding: '12px' }}>المنطقة والمدينة</th>
+                        <th style={{ padding: '12px' }}>حالة الاستقبال</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {partnerApps.filter(p => p.status === 'verified').map((p, idx) => (
+                        <tr key={idx} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+                          <td style={{ padding: '12px', fontWeight: 'bold' }}>{p.business_name}</td>
+                          <td style={{ padding: '12px' }}>{p.biz_type}</td>
+                          <td style={{ padding: '12px', color: '#fbbf24' }}>٤.٩ ★</td>
+                          <td style={{ padding: '12px' }}>{p.city} • {p.district}</td>
+                          <td style={{ padding: '12px' }}>
+                            <span style={{ fontSize: '0.72rem', background: 'rgba(16,185,129,0.15)', color: 'var(--color-success)', padding: '4px 10px', borderRadius: 8 }}>مفتوح ويستقبل</span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {/* TAB VIEW 15: طلبات الانضمام والتراخيص */}
+            {activeNav === 'admin_partner_join_requests' && (
+              <div style={{ background: 'var(--glass-bg)', border: '1px solid var(--glass-border)', padding: 20, borderRadius: 20 }}>
+                <h3 style={{ fontSize: '1rem', fontWeight: 800, marginBottom: 16 }}>طلبات الانضمام وتدقيق المستندات والتراخيص التجارية</h3>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                  {partnerApps.map(app => (
+                    <div key={app.id} style={{ padding: 16, background: 'rgba(255,255,255,0.01)', border: '1px solid rgba(255,255,255,0.04)', borderRadius: 14 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <div>
+                          <strong style={{ fontSize: '0.95rem' }}>{app.business_name}</strong>
+                          <span style={{ display: 'block', fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>{app.commercial_name} • {app.phone_number}</span>
+                        </div>
+                        <span style={{ fontSize: '0.75rem', background: app.status === 'verified' ? 'rgba(16,185,129,0.15)' : 'rgba(245,158,11,0.15)', color: app.status === 'verified' ? 'var(--color-success)' : '#f59e0b', padding: '4px 12px', borderRadius: '30px' }}>
+                          {app.status === 'verified' ? 'معتمد وموثق ✅' : 'معلق للمراجعة'}
+                        </span>
+                      </div>
+                      
+                      <div style={{ display: 'flex', gap: 10, margin: '12px 0' }}>
+                        <a href={app.cr_document_url} target="_blank" rel="noreferrer" style={{ fontSize: '0.75rem', background: 'rgba(255,255,255,0.03)', padding: '6px 12px', borderRadius: 8 }}>📄 السجل التجاري</a>
+                        <a href={app.owner_id_url} target="_blank" rel="noreferrer" style={{ fontSize: '0.75rem', background: 'rgba(255,255,255,0.03)', padding: '6px 12px', borderRadius: 8 }}>📄 هوية المالك</a>
+                      </div>
+
+                      {app.status !== 'verified' && (
+                        <div style={{ display: 'flex', gap: 8 }}>
+                          <button className="btn btn-primary" style={{ padding: '6px 14px', fontSize: '0.75rem' }} onClick={() => handleApprovePartner(app.id)}>الموافقة والاعتماد الفوري</button>
+                          <button className="btn btn-secondary" style={{ padding: '6px 14px', fontSize: '0.75rem', color: '#ef4444' }} onClick={() => handleRejectPartner(app.id)}>رفض المستندات</button>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* TAB VIEW 20: كل طلبات المنصة */}
+            {activeNav === 'admin_orders_all' && (
+              <div style={{ background: 'var(--glass-bg)', border: '1px solid var(--glass-border)', padding: 20, borderRadius: 20 }}>
+                <h3 style={{ fontSize: '1rem', fontWeight: 800, marginBottom: 16 }}>جميع طلبات الشحن والتوصيل المسجلة بالمنصة</h3>
+                <div style={{ overflowX: 'auto' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'right', fontSize: '0.85rem' }}>
+                    <thead>
+                      <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
+                        <th style={{ padding: '12px' }}>رقم الطلب</th>
+                        <th style={{ padding: '12px' }}>العميل الهاتف</th>
+                        <th style={{ padding: '12px' }}>موقع الاستلام</th>
+                        <th style={{ padding: '12px' }}>موقع التسليم</th>
+                        <th style={{ padding: '12px' }}>رسوم التوصيل</th>
+                        <th style={{ padding: '12px' }}>الحالة</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {orders.map(o => (
+                        <tr key={o.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+                          <td style={{ padding: '12px', fontWeight: 'bold' }}>#{o.id?.substring(0, 8)}</td>
+                          <td style={{ padding: '12px' }}>{o.customer_name} ({o.customer_phone})</td>
+                          <td style={{ padding: '12px' }}>{o.pickup_location?.substring(0, 20)}...</td>
+                          <td style={{ padding: '12px' }}>{o.dropoff_location?.substring(0, 20)}...</td>
+                          <td style={{ padding: '12px', color: 'var(--color-accent-light)', fontWeight: 900 }}>{o.delivery_fee || 12} ر.س</td>
+                          <td style={{ padding: '12px' }}>
+                            <span style={{ fontSize: '0.72rem', background: 'rgba(168,85,247,0.15)', color: 'var(--color-accent-light)', padding: '4px 10px', borderRadius: 8 }}>
+                              {o.status}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {/* TAB VIEW 21: الطلبات الجارية والنشطة */}
+            {activeNav === 'admin_orders_active' && (
+              <div style={{ background: 'var(--glass-bg)', border: '1px solid var(--glass-border)', padding: 20, borderRadius: 20 }}>
+                <h3 style={{ fontSize: '1rem', fontWeight: 800, marginBottom: 16 }}>مراقبة الطلبات النشطة والجارية لحظة بلحظة</h3>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 14 }}>
+                  {orders.filter(o => o.status !== 'delivered' && o.status !== 'cancelled').map(o => (
+                    <div key={o.id} style={{ padding: 14, background: 'rgba(255,255,255,0.01)', border: '1px solid rgba(168,85,247,0.2)', borderRadius: 14 }}>
+                      <strong style={{ fontSize: '0.85rem', display: 'block' }}>طلب رقم #{o.id?.substring(0, 8)}</strong>
+                      <span style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', display: 'block', margin: '4px 0' }}>العميل: {o.customer_name}</span>
+                      <span style={{ fontSize: '0.72rem', color: 'white', display: 'block' }}>الحالة الحالية: <strong>{o.status}</strong></span>
+                      <span style={{ fontSize: '0.7rem', color: 'var(--color-accent-light)', display: 'block', marginTop: 4 }}>السائق: {o.driver_name || 'بانتظار قبول السائق 🛵'}</span>
+                    </div>
+                  ))}
+                  {orders.filter(o => o.status !== 'delivered' && o.status !== 'cancelled').length === 0 && (
+                    <div style={{ textAlign: 'center', padding: '40px 0', color: 'var(--color-text-muted)', width: '100%', gridColumn: '1/-1' }}>لا توجد طلبات جارية نشطة حالياً في المنصة.</div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* TAB VIEW 23: دليل مناديب التوصيل */}
+            {activeNav === 'admin_drivers' && (
+              <div style={{ background: 'var(--glass-bg)', border: '1px solid var(--glass-border)', padding: 20, borderRadius: 20 }}>
+                <h3 style={{ fontSize: '1rem', fontWeight: 800, marginBottom: 16 }}>دليل وطلبات توثيق مناديب التوصيل المعتمدين بالمنصة</h3>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                  {driverApps.map(drv => (
+                    <div key={drv.id} style={{ padding: 16, background: 'rgba(255,255,255,0.01)', border: '1px solid rgba(255,255,255,0.04)', borderRadius: 14, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <div>
+                        <strong style={{ fontSize: '0.92rem' }}>{drv.full_name}</strong>
+                        <p style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', margin: '4px 0 0 0' }}>الهاتف: {drv.phone_number} • المركبة: {drv.vehicle_type} ({drv.license_plate})</p>
+                      </div>
+                      <div style={{ display: 'flex', gap: 8 }}>
+                        {drv.status !== 'verified' ? (
+                          <button className="btn btn-primary" style={{ padding: '6px 12px', fontSize: '0.75rem' }} onClick={() => handleApproveDriver(drv.id)}>توثيق واعتماد</button>
+                        ) : (
+                          <span style={{ fontSize: '0.72rem', background: 'rgba(16,185,129,0.15)', color: 'var(--color-success)', padding: '4px 12px', borderRadius: 8 }}>موثق ومعتمد ✅</span>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* TAB VIEW 24: خريطة التتبع GPS */}
+            {activeNav === 'admin_order_tracking' && (
+              <div style={{ background: 'var(--glass-bg)', border: '1px solid var(--glass-border)', padding: 20, borderRadius: 20 }}>
+                <h3 style={{ fontSize: '1rem', fontWeight: 800, marginBottom: 8 }}>تتبع مواقع المناديب والطلبات الجارية لحظياً عبر الخريطة</h3>
+                <p style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)', marginBottom: 20 }}>محاكاة إحداثيات GPS المحدثة لحظياً بواسطة السائقين على الخريطة الجغرافية بمدينة الرياض.</p>
+                
+                <div style={{ height: '350px', background: '#170d2b', border: '1px solid rgba(255,255,255,0.05)', borderRadius: 16, position: 'relative', overflow: 'hidden', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+                  <div style={{ position: 'absolute', top: 20, right: 20, background: 'rgba(18,11,31,0.9)', padding: 12, borderRadius: 10, border: '1px solid rgba(255,255,255,0.1)', fontSize: '0.75rem', zIndex: 10 }}>
+                    <strong>مفتاح المحاكي:</strong>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
+                      <div style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--color-success)' }}></div>
+                      <span>سائق متصل (أحمد محمد)</span>
+                    </div>
+                  </div>
+                  
+                  {/* Grid Lines simulation */}
+                  <div style={{ position: 'absolute', inset: 0, opacity: 0.1, backgroundImage: 'linear-gradient(rgba(255,255,255,0.1) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.1) 1px, transparent 1px)', backgroundSize: '20px 20px' }}></div>
+                  
+                  <span style={{ fontSize: '1.2rem', color: 'var(--color-accent-light)', position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', fontWeight: 'bold' }}>📍 خريطة الرياض الذكية النشطة</span>
+                  
+                  {/* Driver Node Simulation */}
+                  <motion.div 
+                    animate={{ y: [0, -10, 0], x: [0, 20, 0] }}
+                    transition={{ repeat: Infinity, duration: 4, ease: 'easeInOut' }}
+                    style={{ width: 30, height: 30, borderRadius: '50%', background: 'rgba(16,185,129,0.2)', border: '2px solid var(--color-success)', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'absolute', top: '40%', left: '35%', cursor: 'pointer' }}
+                  >
+                    🛵
+                  </motion.div>
+                </div>
+              </div>
+            )}
+
+            {/* TAB VIEW 31: إعدادات عامة */}
+            {activeNav === 'admin_settings_general' && (
+              <div style={{ background: 'var(--glass-bg)', border: '1px solid var(--glass-border)', padding: 20, borderRadius: 20, display: 'flex', flexDirection: 'column', gap: 16 }}>
+                <h3 style={{ fontSize: '1rem', fontWeight: 800, margin: 0 }}>تكوين وإعدادات المنصة والتحكم العليا بقيم النظام</h3>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--color-text-muted)', marginBottom: 6 }}>رابط خادم الاتصال بـ Supabase API URL</label>
+                  <input type="text" className="input-field" value={supabase.supabaseUrl || 'https://mock.supabase.co'} readOnly />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--color-text-muted)', marginBottom: 6 }}>نصف قطر التغطية والتوصيل الافتراضي (كم)</label>
+                  <input type="number" className="input-field" defaultValue={25} />
+                </div>
+                <button className="btn btn-primary" onClick={() => alert('تم حفظ التكوينات العامة للمنصة بنجاح!')} style={{ alignSelf: 'flex-start', padding: '10px 20px', fontSize: '0.82rem' }}>حفظ التعديلات</button>
+              </div>
+            )}
+
+            {/* FALLBACK VIEW FOR STATIC PAGES */}
+            {!['admin_home', 'admin_notifications', 'admin_kpis', 'admin_app_homepage', 'admin_banners', 'admin_sections', 'admin_categories', 'admin_stories', 'admin_sponsored_products', 'admin_flash_offers', 'admin_coupons', 'admin_push_notifications', 'admin_rewards', 'admin_partners', 'admin_partner_join_requests', 'admin_orders_all', 'admin_orders_active', 'admin_drivers', 'admin_order_tracking', 'admin_settings_general'].includes(activeNav) && (
+              <div style={{ background: 'var(--glass-bg)', border: '1px solid var(--glass-border)', padding: 24, borderRadius: 20, textAlign: 'center' }}>
+                <h3 style={{ fontSize: '1.1rem', fontWeight: 900, marginBottom: 8 }}>هذه الصفحة قيد التحضير المباشر ⚙️</h3>
+                <p style={{ color: 'var(--color-text-muted)', fontSize: '0.84rem' }}>أنت تنظر حالياً إلى واجهة مستعرض المجموعات. سيتم تزويدها ببيانات إضافية تدريجياً.</p>
+              </div>
+            )}
+
+          </main>
+
+          {/* PERSISTENT PHONE DEVICE LIVE MOCKUP (Wow Factor!) */}
+          <div style={{ width: '310px', flexShrink: 0, borderRight: '1px solid rgba(255,255,255,0.05)', background: 'rgba(18,11,31,0.3)', padding: '24px 16px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100vh', position: 'sticky', top: 0 }}>
+            <span style={{ fontSize: '0.78rem', color: 'var(--color-accent-light)', marginBottom: 12, fontWeight: 900 }}>📱 معاينة حية كتطبيق العميل الجوال</span>
+            
+            {/* Phone shell container */}
+            <div style={{ width: '270px', height: '520px', border: '8px solid rgba(255,255,255,0.1)', borderRadius: '36px', background: '#090412', overflow: 'hidden', display: 'flex', flexDirection: 'column', position: 'relative', boxShadow: '0 20px 50px rgba(0,0,0,0.6)' }}>
+              
+              {/* Phone Speaker & Notch */}
+              <div style={{ width: '100px', height: '18px', background: '#120b1f', borderBottomLeftRadius: '10px', borderBottomRightRadius: '10px', position: 'absolute', top: 0, left: '50%', transform: 'translateX(-50%)', zIndex: 100, display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+                <div style={{ width: '40px', height: '3px', background: 'rgba(255,255,255,0.2)', borderRadius: '2px' }}></div>
+              </div>
+
+              {/* Status bar */}
+              <div style={{ height: '30px', padding: '0 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.62rem', color: 'white', marginTop: '4px', zIndex: 99 }}>
+                <span>9:41 AM</span>
+                <div style={{ display: 'flex', gap: 4 }}>
+                  <span>📶</span>
+                  <span>🔋</span>
+                </div>
+              </div>
+
+              {/* App screen space */}
+              <div style={{ flex: 1, overflowY: 'auto', padding: '10px 14px', display: 'flex', flexDirection: 'column', gap: 14 }} className="no-scrollbar">
+                
+                {/* Logo & Header in mobile app mockup */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <strong style={{ fontSize: '0.9rem', color: 'white' }}>بوست إكس BoostX</strong>
+                  <span style={{ fontSize: '0.8rem' }}>🛒</span>
+                </div>
+
+                {/* Banner Carousel Preview */}
+                {banners.filter(x => x.active).length > 0 && (
+                  <div style={{ height: '90px', borderRadius: '12px', overflow: 'hidden', position: 'relative', border: '1px solid rgba(255,255,255,0.1)' }}>
+                    <img 
+                      src={banners.filter(x => x.active)[0]?.image} 
+                      alt="Banner Preview" 
+                      style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
+                    />
+                    <div style={{ position: 'absolute', bottom: 0, insetInline: 0, background: 'linear-gradient(transparent, rgba(0,0,0,0.8))', padding: '6px', fontSize: '0.65rem', color: 'white', fontWeight: 'bold' }}>
+                      {banners.filter(x => x.active)[0]?.title}
+                    </div>
+                  </div>
+                )}
+
+                {/* Stories Preview */}
+                <div style={{ display: 'flex', gap: 8, overflowX: 'auto' }} className="no-scrollbar">
+                  {stories.filter(x => x.approved).map((st, i) => (
+                    <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, flexShrink: 0 }}>
+                      <div style={{ width: '38px', height: '38px', borderRadius: '50%', border: '2px solid #a855f7', padding: '1px', overflow: 'hidden' }}>
+                        <img src={st.image} alt={st.store} style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
+                      </div>
+                      <span style={{ fontSize: '0.52rem', color: 'rgba(255,255,255,0.8)' }}>{st.store}</span>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Category Grid Preview */}
+                <div>
+                  <span style={{ fontSize: '0.68rem', fontWeight: 'bold', color: 'white', display: 'block', marginBottom: 6 }}>التصنيفات الرئيسية</span>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 6 }}>
+                    {categories.filter(c => c.is_active).slice(0, 4).map((cat, idx) => (
+                      <div key={idx} style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 8, padding: 6, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4 }}>
+                        <span style={{ fontSize: '0.8rem' }}>
+                          {cat.id === 'food' ? '🍗' : cat.id === 'pharmacy' ? '💊' : cat.id === 'supermarket' ? '🛒' : '🏠'}
+                        </span>
+                        <span style={{ fontSize: '0.5rem', color: 'white', textAlign: 'center' }}>{cat.name}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Sponsored Products Preview */}
+                <div>
+                  <span style={{ fontSize: '0.68rem', fontWeight: 'bold', color: 'white', display: 'block', marginBottom: 6 }}>منتجات ممولة مميزة</span>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                    {sponsoredProducts.filter(x => x.is_active).slice(0, 2).map((sp, idx) => (
+                      <div key={idx} style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: 10, overflow: 'hidden' }}>
+                        <img src={sp.image_url || 'https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=200&q=80'} alt={sp.title} style={{ width: '100%', height: '55px', objectFit: 'cover' }} />
+                        <div style={{ padding: 6 }}>
+                          <span style={{ fontSize: '0.52rem', fontWeight: 'bold', color: 'white', display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{sp.title}</span>
+                          <span style={{ fontSize: '0.5rem', color: 'var(--color-success)', fontWeight: 'bold' }}>{sp.new_price || 15} ر.س</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+              </div>
+
+            </div>
           </div>
+
         </div>
+
       </div>
+
+      {/* CREATE MODAL: BANNERS */}
+      {showAddBannerModal && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 99999, background: 'rgba(0,0,0,0.6)', display: 'flex', justifyContent: 'center', alignItems: 'center', backdropFilter: 'blur(8px)' }}>
+          <form onSubmit={handleAddBanner} style={{ background: '#1c0f33', border: '1px solid rgba(168,85,247,0.4)', padding: 24, borderRadius: 20, width: '420px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+            <h3 style={{ fontSize: '1.1rem', fontWeight: 900, margin: 0, color: 'white' }}>إضافة بنر إعلاني ترويجي جديد</h3>
+            
+            <div>
+              <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--color-text-muted)', marginBottom: 6 }}>عنوان البنر الرئيسي</label>
+              <input type="text" className="input-field" placeholder="مثال: خصم ٥٠٪ على أول طلب" value={newBanner.title} onChange={e => setNewBanner({ ...newBanner, title: e.target.value })} required />
+            </div>
+
+            <div>
+              <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--color-text-muted)', marginBottom: 6 }}>رابط صورة البنر (Image URL)</label>
+              <input type="text" className="input-field" placeholder="أدخل رابط صورة جذابة ومحسنة..." value={newBanner.image} onChange={e => setNewBanner({ ...newBanner, image: e.target.value })} required />
+            </div>
+
+            <div>
+              <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--color-text-muted)', marginBottom: 6 }}>مسار توجيه النقرة (Route Path)</label>
+              <input type="text" className="input-field" placeholder="مثال: /promos" value={newBanner.route} onChange={e => setNewBanner({ ...newBanner, route: e.target.value })} />
+            </div>
+
+            <div style={{ display: 'flex', gap: 10, marginTop: 8 }}>
+              <button type="submit" className="btn btn-primary" style={{ flex: 1 }}>إضافة ونشر</button>
+              <button type="button" className="btn btn-secondary" style={{ flex: 1, color: 'white' }} onClick={() => setShowAddBannerModal(false)}>إلغاء</button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* CREATE MODAL: COUPONS */}
+      {showAddCouponModal && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 99999, background: 'rgba(0,0,0,0.6)', display: 'flex', justifyContent: 'center', alignItems: 'center', backdropFilter: 'blur(8px)' }}>
+          <form onSubmit={handleAddCoupon} style={{ background: '#1c0f33', border: '1px solid rgba(168,85,247,0.4)', padding: 24, borderRadius: 20, width: '400px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+            <h3 style={{ fontSize: '1.1rem', fontWeight: 900, margin: 0, color: 'white' }}>إضافة كود خصم كوبون جديد</h3>
+            
+            <div>
+              <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--color-text-muted)', marginBottom: 6 }}>رمز الكوبون (Coupon Code)</label>
+              <input type="text" className="input-field" placeholder="مثال: BOOSTX50" value={newCoupon.code} onChange={e => setNewCoupon({ ...newCoupon, code: e.target.value })} required />
+            </div>
+
+            <div>
+              <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--color-text-muted)', marginBottom: 6 }}>قيمة ونوع الخصم</label>
+              <input type="text" className="input-field" placeholder="مثال: ٥٠٪ أو ٢٥ ر.س" value={newCoupon.discount} onChange={e => setNewCoupon({ ...newCoupon, discount: e.target.value })} required />
+            </div>
+
+            <div>
+              <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--color-text-muted)', marginBottom: 6 }}>الحد الأدنى للإنفاق</label>
+              <input type="text" className="input-field" placeholder="مثال: ٨٠ ر.س" value={newCoupon.minSpend} onChange={e => setNewCoupon({ ...newCoupon, minSpend: e.target.value })} />
+            </div>
+
+            <div style={{ display: 'flex', gap: 10, marginTop: 8 }}>
+              <button type="submit" className="btn btn-primary" style={{ flex: 1 }}>إنشاء الكوبون</button>
+              <button type="button" className="btn btn-secondary" style={{ flex: 1, color: 'white' }} onClick={() => setShowAddCouponModal(false)}>إلغاء</button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* CREATE MODAL: REWARDS */}
+      {showAddRewardModal && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 99999, background: 'rgba(0,0,0,0.6)', display: 'flex', justifyContent: 'center', alignItems: 'center', backdropFilter: 'blur(8px)' }}>
+          <form onSubmit={handleAddReward} style={{ background: '#1c0f33', border: '1px solid rgba(168,85,247,0.4)', padding: 24, borderRadius: 20, width: '400px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+            <h3 style={{ fontSize: '1.1rem', fontWeight: 900, margin: 0, color: 'white' }}>إضافة مكافأة ولاء جديدة</h3>
+            
+            <div>
+              <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--color-text-muted)', marginBottom: 6 }}>عنوان الجائزة أو الخدمة المستردة</label>
+              <input type="text" className="input-field" placeholder="مثال: وجبة بطاطس مجانية" value={newReward.title} onChange={e => setNewReward({ ...newReward, title: e.target.value })} required />
+            </div>
+
+            <div>
+              <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--color-text-muted)', marginBottom: 6 }}>تكلفة الاسترداد بالنقاط</label>
+              <input type="number" className="input-field" value={newReward.cost} onChange={e => setNewReward({ ...newReward, cost: Number(e.target.value) })} required />
+            </div>
+
+            <div style={{ display: 'flex', gap: 10, marginTop: 8 }}>
+              <button type="submit" className="btn btn-primary" style={{ flex: 1 }}>إضافة الجائزة</button>
+              <button type="button" className="btn btn-secondary" style={{ flex: 1, color: 'white' }} onClick={() => setShowAddRewardModal(false)}>إلغاء</button>
+            </div>
+          </form>
+        </div>
+      )}
+
     </div>
   );
 };
+export default AdminDashboard;

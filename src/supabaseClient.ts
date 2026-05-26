@@ -852,6 +852,53 @@ const sandboxClient = {
       return { data: { session, user }, error: null };
     },
 
+    signInWithPassword: async (params: { email?: string; phone?: string; password?: string }) => {
+      addLog('query', 'Auth: signInWithPassword()', JSON.stringify(params, null, 2));
+      
+      const identifier = params.email || params.phone || '';
+      const password = params.password || '';
+      
+      let role = 'partner';
+      let name = 'شريك تجريبي';
+      
+      if (identifier.includes('superadmin') || identifier.includes('super_admin') || identifier === 'admin@boostx.sa') {
+        role = 'superadmin';
+        name = 'المدير العام';
+      } else if (identifier.includes('admin') || identifier === 'supervisor@boostx.sa') {
+        role = 'admin';
+        name = 'مشرف النظام';
+      } else if (identifier.includes('driver') || identifier === 'driver@boostx.sa' || identifier === '+966522222222') {
+        role = 'driver';
+        name = 'خالد العتيبي';
+      } else if (identifier.includes('technician') || identifier === 'technician@boostx.sa' || identifier === '+966533333333') {
+        role = 'technician';
+        name = 'خالد السريع';
+      } else if (identifier.includes('partner') || identifier === 'partner@boostx.sa') {
+        role = 'partner';
+        name = 'مطعم البيك';
+      }
+      
+      const user = {
+        id: 'usr_demo_' + role + '_' + Math.random().toString(36).substring(2, 8),
+        email: params.email || `${role}_demo@boostx.sa`,
+        phone: params.phone || '+966500000000',
+        role: role,
+        name: name,
+        created_at: new Date().toISOString()
+      };
+      
+      const session = {
+        access_token: 'sandbox-jwt-' + Math.random().toString(36).substring(2, 15),
+        user
+      };
+      
+      sandboxSession = session;
+      localStorage.setItem('BX_SANDBOX_SESSION', JSON.stringify(session));
+      addLog('success', 'Auth: تم الدخول بكلمة المرور محاكاة', `تم الدخول بنجاح لدور ${role}`);
+      
+      return { data: { session, user }, error: null };
+    },
+
     signOut: async () => {
       addLog('query', 'Auth: signOut()', 'تسجيل خروج المستخدم الحالي.');
       sandboxSession = null;
