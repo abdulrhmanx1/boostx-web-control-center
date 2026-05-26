@@ -16,9 +16,12 @@ const RouteGuardBlocked = ({ path, userRole }: { path: string; userRole: string 
       <div style={{ width: 80, height: 80, borderRadius: '50%', background: 'rgba(239, 68, 68, 0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#ef4444', fontSize: '2.5rem', marginBottom: 20 }}>🛑</div>
       <h2 style={{ fontSize: '1.5rem', fontWeight: 900, marginBottom: 8 }}>منطقة غير مصرح بها</h2>
       <p style={{ color: 'var(--color-text-muted)', fontSize: '0.9rem', maxWidth: 400, marginBottom: 24, lineHeight: 1.6 }}>
-        عذراً، لا تمتلك الصلاحيات الكافية للوصول إلى المسار <strong>{path}</strong> بصفتك <strong>{userRole}</strong>. الرجاء تسجيل الدخول بحساب شريك أو إداري معتمد.
+        عذراً، لا تمتلك الصلاحيات الكافية للوصول إلى المسار <strong>{path}</strong> بصفتك <strong>{userRole || 'زائر'}</strong>. الرجاء تسجيل الدخول بحساب شريك أو فني أو إداري معتمد.
       </p>
-      <button className="btn btn-primary" onClick={() => { window.location.href = '/'; }}>العودة للرئيسية</button>
+      <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', justifyContent: 'center' }}>
+        <button className="btn btn-primary" onClick={() => { window.location.href = '/'; }}>العودة للرئيسية</button>
+        <button className="btn btn-secondary" onClick={() => { localStorage.removeItem('BX_SANDBOX_SESSION'); window.location.href = '/portals'; }} style={{ color: 'white', border: '1px solid rgba(255,255,255,0.15)' }}>تسجيل الخروج والتبديل لحساب آخر 🔌</button>
+      </div>
     </div>
   );
 };

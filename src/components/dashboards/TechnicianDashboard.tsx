@@ -111,8 +111,8 @@ export const TechnicianDashboard = ({ onBack, defaultTab, hideSidebar = false }:
       .subscribe();
 
     return () => {
-      supabase.removeChannel(servicesChannel);
-      supabase.removeChannel(bookingsChannel);
+      servicesChannel.unsubscribe();
+      bookingsChannel.unsubscribe();
     };
   }, [technicianId]);
 
