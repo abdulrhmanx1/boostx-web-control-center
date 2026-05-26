@@ -6,7 +6,7 @@ import {
   Zap, Ticket, Send, Award, UsersRound, UserPlus, PackageOpen, Tag, Percent,
   ShoppingCart, Truck, MapPin, AlertTriangle, UserCheck, Heart, Wallet, MessageSquare,
   BarChart, ChevronDown, ChevronUp, Settings, Map, Lock, ClipboardList, Plus, Search,
-  Filter, Trash2, Edit3, Eye, Power, Check, X
+  Filter, Trash2, Edit3, Eye, Power, Check, X, RefreshCw
 } from 'lucide-react';
 import { supabase } from '../../supabaseClient';
 
@@ -24,6 +24,51 @@ interface SidebarGroup {
 
 export const AdminDashboard = ({ onBack, defaultTab, hideSidebar = false }: { onBack?: () => void, defaultTab?: string, hideSidebar?: boolean }) => {
   const [activeNav, setActiveNav] = useState(defaultTab || 'admin_home');
+  
+  // Real-time Support Tickets and Complaints States
+  const [supportTickets, setSupportTickets] = useState<any[]>(() => {
+    const saved = localStorage.getItem('BX_SANDBOX_SUPPORT_TICKETS');
+    if (saved) return JSON.parse(saved);
+    return [
+      { id: 'TKT-991', customer_name: 'مطعم البيك - الشريك', category: 'حساب وماليات', issue_type: 'حساب وماليات', description: 'يوجد فروقات بقيمة العمولات المستقطعة من طلبين بتاريخ ٢٤ مايو', priority: 'high', status: 'open', created_at: new Date().toISOString() },
+      { id: 'TKT-202', customer_name: 'سليمان المطيري', category: 'تأخير التوصيل', issue_type: 'تأخير التوصيل', description: 'الطلب متأخر لأكثر من ٤٠ دقيقة والوجبة باردة بالكامل ولم تصلني بعد.', status: 'open', priority: 'high', created_at: new Date(Date.now() - 3600000).toISOString() }
+    ];
+  });
+  const [activeTicketId, setActiveTicketId] = useState<string | null>(null);
+  const [adminReplyText, setAdminReplyText] = useState('');
+  const [ticketMessages, setTicketMessages] = useState<Record<string, any[]>>(() => {
+    return {
+      'TKT-991': [
+        { id: 'msg-1', sender_role: 'system', sender_name: 'النظام', message_text: 'تم فتح تذكرة دعم فني جديدة رقم #TKT-991 بنجاح. جاري المراجعة والدعم من الإدارة المالية.', created_at: new Date().toISOString() }
+      ]
+    };
+  });
+
+  const handleSendAdminReply = (ticketId: string) => {
+    if (!adminReplyText.trim()) return;
+    const newMsg = {
+      id: 'msg-admin-' + Date.now(),
+      sender_role: 'admin',
+      sender_name: 'مراقب المنصة (الدعم الفني)',
+      message_text: adminReplyText,
+      created_at: new Date().toISOString()
+    };
+    
+    // Save to local state
+    setTicketMessages(prev => ({
+      ...prev,
+      [ticketId]: [...(prev[ticketId] || []), newMsg]
+    }));
+    
+    // Save to localStorage so that the Partner Portal syncs instantly in the sandbox
+    const currentMsgs = JSON.parse(localStorage.getItem(`bx_ticket_msgs_${ticketId}`) || '[]');
+    currentMsgs.push(newMsg);
+    localStorage.setItem(`bx_ticket_msgs_${ticketId}`, JSON.stringify(currentMsgs));
+    
+    setAdminReplyText('');
+    alert('✓ تم إرسال رد الدعم المعتمد للطرف الآخر بنجاح!');
+  };
+
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({
     overview: false,
     app_management: false,
@@ -1102,8 +1147,137 @@ export const AdminDashboard = ({ onBack, defaultTab, hideSidebar = false }: { on
               </div>
             )}
 
+            {/* TAB VIEW: تذاكر الدعم الفني والشكاوى (admin_complaints) */}
+            {activeNav === 'admin_complaints' && (
+              <div style={{ background: 'var(--glass-bg)', border: '1px solid var(--glass-border)', padding: 20, borderRadius: 20, display: 'flex', flexDirection: 'column', gap: 16 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                  <div>
+                    <h3 style={{ fontSize: '1rem', fontWeight: 800, margin: 0 }}>🎫 تذاكر الدعم الفني والشكاوى الواردة</h3>
+                    <span style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)' }}>إدارة شكاوى العملاء واستفسارات المتاجر والشركاء مع إمكانية الرد المباشر</span>
+                  </div>
+                  <button 
+                    onClick={() => {
+                      const saved = localStorage.getItem('BX_SANDBOX_SUPPORT_TICKETS');
+                      if (saved) {
+                        setSupportTickets(JSON.parse(saved));
+                      }
+                      alert('✓ تم تحديث ومزامنة قائمة التذاكر!');
+                    }} 
+                    className="btn btn-secondary" 
+                    style={{ padding: '6px 12px', fontSize: '0.72rem', display: 'flex', alignItems: 'center', gap: 6 }}
+                  >
+                    <RefreshCw size={13} style={{ marginRight: 4 }} /> تحديث القائمة
+                  </button>
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                  {supportTickets.map(t => {
+                    const isChatActive = activeTicketId === t.id;
+                    const messages = ticketMessages[t.id] || [
+                      { id: 'smsg-1', sender_role: 'system', sender_name: 'النظام', message_text: t.description || 'تم استلام تذكرتك وجاري تحويلها للقسم المختص.', created_at: t.created_at }
+                    ];
+                    
+                    return (
+                      <div key={t.id} style={{ padding: 16, background: 'rgba(255,255,255,0.01)', border: '1px solid rgba(255,255,255,0.04)', borderRadius: 14 }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                          <div>
+                            <span style={{ fontSize: '0.62rem', background: 'rgba(168,85,247,0.15)', color: '#a855f7', padding: '2px 6px', borderRadius: '4px', fontWeight: 'bold' }}>
+                              {t.issue_type || t.category || 'عام'}
+                            </span>
+                            <strong style={{ fontSize: '0.85rem', display: 'block', marginTop: 4 }}>تذكرة #{t.id} • {t.customer_name || 'شريك'}</strong>
+                          </div>
+                          
+                          <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+                            <span style={{
+                              fontSize: '0.68rem',
+                              color: t.status === 'open' ? '#f59e0b' : '#10b981',
+                              fontWeight: 'bold'
+                            }}>
+                              {t.status === 'open' ? '⏳ مفتوحة' : '✓ مغلقة ومحلولة'}
+                            </span>
+                            
+                            <button
+                              onClick={() => {
+                                const next = t.status === 'open' ? 'closed' : 'open';
+                                const updated = supportTickets.map(item => item.id === t.id ? { ...item, status: next } : item);
+                                setSupportTickets(updated);
+                                localStorage.setItem('BX_SANDBOX_SUPPORT_TICKETS', JSON.stringify(updated));
+                                alert(next === 'closed' ? 'تم حل وتصفية التذكرة بنجاح!' : 'تم إعادة فتح التذكرة.');
+                              }}
+                              className="btn btn-secondary"
+                              style={{ padding: '4px 8px', fontSize: '0.68rem' }}
+                            >
+                              {t.status === 'open' ? 'إغلاق وحل التذكرة' : 'إعادة فتح التذكرة'}
+                            </button>
+                            
+                            <button
+                              onClick={() => {
+                                setActiveTicketId(isChatActive ? null : t.id);
+                              }}
+                              className="btn btn-primary"
+                              style={{ padding: '4px 10px', fontSize: '0.68rem' }}
+                            >
+                              {isChatActive ? 'إغلاق المحادثة' : '💬 الرد والتحدث'}
+                            </button>
+                          </div>
+                        </div>
+
+                        <p style={{ fontSize: '0.78rem', color: 'var(--color-text-main)', margin: '4px 0' }}>
+                          📝 <strong>شرح المشكلة:</strong> {t.description || t.title}
+                        </p>
+                        
+                        {isChatActive && (
+                          <div style={{ marginTop: 14, padding: 14, background: 'rgba(0,0,0,0.2)', borderRadius: 10, display: 'flex', flexDirection: 'column', gap: 10 }}>
+                            <span style={{ fontSize: '0.7rem', color: '#a855f7', fontWeight: 'bold' }}>محادثة التدقيق والدعم لتذكرة #{t.id}</span>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: '200px', overflowY: 'auto' }} className="no-scrollbar">
+                              {messages.map(msg => (
+                                <div key={msg.id} style={{
+                                  padding: '8px 10px',
+                                  borderRadius: '8px',
+                                  background: msg.sender_role === 'admin' ? 'rgba(168,85,247,0.15)' : 'rgba(255,255,255,0.05)',
+                                  alignSelf: msg.sender_role === 'admin' ? 'flex-end' : 'flex-start',
+                                  fontSize: '0.72rem',
+                                  maxWidth: '90%'
+                                }}>
+                                  <strong>{msg.sender_name || 'مرسل'}:</strong> {msg.message_text}
+                                </div>
+                              ))}
+                            </div>
+
+                            <div style={{ display: 'flex', gap: 10, marginTop: 4 }}>
+                              <input
+                                type="text"
+                                className="input-field"
+                                placeholder="اكتب رد الدعم الرسمي هنا..."
+                                style={{ padding: '6px 12px', fontSize: '0.72rem' }}
+                                value={adminReplyText}
+                                onChange={e => setAdminReplyText(e.target.value)}
+                                onKeyDown={e => {
+                                  if (e.key === 'Enter') handleSendAdminReply(t.id);
+                                }}
+                              />
+                              <button
+                                onClick={() => handleSendAdminReply(t.id)}
+                                className="btn btn-primary"
+                                style={{ padding: '0 16px', fontSize: '0.72rem' }}
+                              >
+                                إرسال الرد
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                  {supportTickets.length === 0 && (
+                    <div style={{ textAlign: 'center', padding: '30px 0', color: 'var(--color-text-muted)' }}>لا توجد تذاكر دعم فني مفتوحة حالياً.</div>
+                  )}
+                </div>
+              </div>
+            )}
+
             {/* FALLBACK VIEW FOR STATIC PAGES */}
-            {!['admin_home', 'admin_notifications', 'admin_kpis', 'admin_app_homepage', 'admin_banners', 'admin_sections', 'admin_categories', 'admin_stories', 'admin_sponsored_products', 'admin_flash_offers', 'admin_coupons', 'admin_push_notifications', 'admin_rewards', 'admin_partners', 'admin_partner_join_requests', 'admin_orders_all', 'admin_orders_active', 'admin_drivers', 'admin_order_tracking', 'admin_settings_general'].includes(activeNav) && (
+            {!['admin_home', 'admin_notifications', 'admin_kpis', 'admin_app_homepage', 'admin_banners', 'admin_sections', 'admin_categories', 'admin_stories', 'admin_sponsored_products', 'admin_flash_offers', 'admin_coupons', 'admin_push_notifications', 'admin_rewards', 'admin_partners', 'admin_partner_join_requests', 'admin_orders_all', 'admin_orders_active', 'admin_drivers', 'admin_order_tracking', 'admin_settings_general', 'admin_complaints'].includes(activeNav) && (
               <div style={{ background: 'var(--glass-bg)', border: '1px solid var(--glass-border)', padding: 24, borderRadius: 20, textAlign: 'center' }}>
                 <h3 style={{ fontSize: '1.1rem', fontWeight: 900, marginBottom: 8 }}>هذه الصفحة قيد التحضير المباشر ⚙️</h3>
                 <p style={{ color: 'var(--color-text-muted)', fontSize: '0.84rem' }}>أنت تنظر حالياً إلى واجهة مستعرض المجموعات. سيتم تزويدها ببيانات إضافية تدريجياً.</p>
