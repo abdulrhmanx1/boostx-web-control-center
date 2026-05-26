@@ -25,14 +25,23 @@ const RouteGuardBlocked = ({ path, userRole }: { path: string; userRole: string 
 
 export default function App() {
   const [currentPath, setCurrentPath] = useState(window.location.pathname);
-  
-  // Set high-privilege default session so that the control center handles all dashboards in local testing
-  const currentUser = {
-    id: 'usr_admin_1',
-    name: 'عبدالرحمن العتيبي (المدير العام)',
-    role: 'superadmin',
-    email: 'admin@boostx.sa'
-  };
+  const [currentUser, setCurrentUser] = useState<any>(() => {
+    const saved = localStorage.getItem('BX_SANDBOX_SESSION');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (parsed.user) return parsed.user;
+      } catch (e) {
+        console.error('Session parse error:', e);
+      }
+    }
+    return {
+      id: 'usr_admin_1',
+      name: 'عبدالرحمن العتيبي (المدير العام - تجريبي)',
+      role: 'superadmin',
+      email: 'admin@boostx.sa'
+    };
+  });
 
   useEffect(() => {
     const handlePopState = () => {

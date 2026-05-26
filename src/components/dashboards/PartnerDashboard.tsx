@@ -105,7 +105,7 @@ export const PartnerDashboard = ({ onBack, defaultTab, hideSidebar = false }: { 
     fetchProducts();
 
     const channel = supabase.channel('realtime:partner_dash_products')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'products', filter: `partner_id=eq.${partnerId}` }, () => {
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'menu_items', filter: `partner_id=eq.${partnerId}` }, () => {
         fetchProducts();
       })
       .subscribe();
@@ -115,7 +115,7 @@ export const PartnerDashboard = ({ onBack, defaultTab, hideSidebar = false }: { 
     };
   }, []);
 
-  const toggleProductActive = async (prodId: number) => {
+  const toggleProductActive = async (prodId: any) => {
     const prod = products.find(p => p.id === prodId);
     if (!prod) return;
     try {
@@ -140,7 +140,6 @@ export const PartnerDashboard = ({ onBack, defaultTab, hideSidebar = false }: { 
       const rawPrice = parseInt(priceStr.replace(/[^0-9]/g, '')) || 20;
       try {
         const newProd = {
-          id: Math.floor(1000 + Math.random() * 9000),
           partner_id: partnerId,
           name,
           desc: desc || '',
@@ -165,7 +164,8 @@ export const PartnerDashboard = ({ onBack, defaultTab, hideSidebar = false }: { 
       try {
         const { data: ordersData, error: ordersError } = await supabase
           .from('orders')
-          .select('*');
+          .select('*')
+          .eq('partner_id', partnerId);
         if (!ordersError && ordersData) {
           const { data: itemsData } = await supabase
             .from('order_items')
@@ -183,8 +183,8 @@ export const PartnerDashboard = ({ onBack, defaultTab, hideSidebar = false }: { 
     };
     fetchOrders();
 
-    const channel = supabase.channel('realtime:partner_dash_orders')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, () => {
+    const channel = supabase.channel(`realtime:partner_dash_orders:${partnerId}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'orders', filter: `partner_id=eq.${partnerId}` }, () => {
         fetchOrders();
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'order_items' }, () => {
@@ -199,25 +199,28 @@ export const PartnerDashboard = ({ onBack, defaultTab, hideSidebar = false }: { 
 
   const handleUpdateOrderStatus = async (orderId: string, nextStatus: string) => {
     try {
+      const targetOrder = orders.find((o: any) => o.id === orderId);
+      const customerId = targetOrder?.customer_id;
+      
       const { error } = await supabase
         .from('orders')
         .update({ status: nextStatus })
         .eq('id', orderId);
       if (!error) {
-        // Also trigger an instant notification status update loop
-        await supabase.from('notifications').insert({
-          id: 'notif-' + Math.floor(100 + Math.random() * 900),
-          user_id: 'usr_cust_1',
-          type: 'order',
-          title: `تحديث طلبك: ${nextStatus} 📦`,
-          body: `قام الشريك ${storeName} بتحديث حالة طلبك رقم #${orderId} إلى: ${nextStatus}`,
-          image_url: logoEmoji === '🍗' ? 'https://images.unsplash.com/photo-1562967914-608f82629710?w=300&q=80' : 'https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=300&q=80',
-          target_route: 'order-tracking',
-          is_sponsored: false,
-          created_at: new Date().toISOString(),
-          read: false
-        });
-        alert(`تم تحديث حالة الطلب #${orderId} بنجاح إلى: ${nextStatus}`);
+        if (customerId) {
+          // Also trigger an instant notification status update loop to the real customer!
+          await supabase.from('notifications').insert({
+            user_id: customerId,
+            type: 'order',
+            title: `تحديث طلبك: ${nextStatus} 📦`,
+            description: `قام الشريك ${storeName} بتحديث حالة طلبك رقم #${orderId.substring(0, 8)} إلى: ${nextStatus}`,
+            image_url: logoEmoji === '🍗' ? 'https://images.unsplash.com/photo-1562967914-608f82629710?w=300&q=80' : 'https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=300&q=80',
+            created_at: new Date().toISOString(),
+            read: false,
+            unread: true
+          });
+        }
+        alert(`تم تحديث حالة الطلب #${orderId.substring(0, 8)} بنجاح إلى: ${nextStatus}`);
       }
     } catch (err) {
       console.error('Error updating order status:', err);
@@ -404,19 +407,29 @@ export const PartnerDashboard = ({ onBack, defaultTab, hideSidebar = false }: { 
                       )}
                     </div>
                     <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-                      {order.status === 'قيد التجهيز' && (
-                        <button onClick={() => handleUpdateOrderStatus(order.id, 'تم التجهيز، بانتظار المندوب')} className="btn btn-primary" style={{ padding: '6px 12px', fontSize: '0.72rem', background: '#f59e0b', border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 900, color: 'white' }}>
+                      {/* Pending status */}
+                      {(order.status === 'pending' || order.status === 'قيد الانتظار' || order.status === 'accepted' || order.status === 'مقبول') && (
+                        <>
+                          <button onClick={() => handleUpdateOrderStatus(order.id, 'preparing')} className="btn btn-primary" style={{ padding: '6px 12px', fontSize: '0.72rem', background: '#10b981', border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 900, color: 'white' }}>
+                            قبول وتحضير الطلب 👨‍🍳
+                          </button>
+                          <button onClick={() => handleUpdateOrderStatus(order.id, 'cancelled')} className="btn btn-secondary" style={{ padding: '6px 12px', fontSize: '0.72rem', background: '#ef4444', border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 900, color: 'white' }}>
+                            رفض الطلب ❌
+                          </button>
+                        </>
+                      )}
+
+                      {/* Preparing status */}
+                      {(order.status === 'preparing' || order.status === 'قيد التجهيز') && (
+                        <button onClick={() => handleUpdateOrderStatus(order.id, 'out_for_delivery')} className="btn btn-primary" style={{ padding: '6px 12px', fontSize: '0.72rem', background: '#f59e0b', border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 900, color: 'white' }}>
                           جاهز للتسليم 📦
                         </button>
                       )}
-                      {order.status === 'تم التجهيز، بانتظار المندوب' && (
-                        <button onClick={() => handleUpdateOrderStatus(order.id, 'تم التسليم للمندوب')} className="btn btn-primary" style={{ padding: '6px 12px', fontSize: '0.72rem', background: '#10b981', border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 900, color: 'white' }}>
-                          تسليم المندوب 🛵
-                        </button>
-                      )}
-                      {order.status !== 'تم التوصيل للعميل' && (
-                        <button onClick={() => handleUpdateOrderStatus(order.id, 'تم التوصيل للعميل')} className="btn btn-secondary" style={{ padding: '6px 12px', fontSize: '0.72rem', color: 'white', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, cursor: 'pointer', background: 'transparent' }}>
-                          إكمال وتوصيل الطلب 🏁
+
+                      {/* Out for delivery / Ready for delivery status */}
+                      {(order.status === 'out_for_delivery' || order.status === 'جاهز للتوصيل' || order.status === 'في الطريق' || order.status === 'تم التجهيز، بانتظار المندوب' || order.status === 'تم التسليم للمندوب') && (
+                        <button onClick={() => handleUpdateOrderStatus(order.id, 'delivered')} className="btn btn-primary" style={{ padding: '6px 12px', fontSize: '0.72rem', background: '#10b981', border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 900, color: 'white' }}>
+                          تم التوصيل للعميل 🏁
                         </button>
                       )}
                     </div>

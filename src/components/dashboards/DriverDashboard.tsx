@@ -1,12 +1,21 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { 
   Truck, Clock, DollarSign, MapPin, CheckCircle, Navigation, ArrowRight, Star
 } from 'lucide-react';
+import { supabase } from '../../supabaseClient';
 
 export const DriverDashboard = ({ onBack, defaultTab, hideSidebar = false }: { onBack?: () => void, defaultTab?: string, hideSidebar?: boolean }) => {
   const [activeTab, setActiveTab] = useState(defaultTab || 'tasks');
   const [isOnline, setIsOnline] = useState(true);
+
+  const [tasks, setTasks] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const driverId = 'usr_driver_1'; // Static sandbox driver id for this dashboard simulator
+  const driverName = 'خالد العتيبي';
+  const driverPhone = '+966522222222';
+  const driverVehicle = 'كيا سيراتو (أ ب ج ١٢٣٤)';
 
   const stats = [
     { label: 'طلبات مكتملة اليوم', val: '٨ طلبات' },
@@ -14,10 +23,130 @@ export const DriverDashboard = ({ onBack, defaultTab, hideSidebar = false }: { o
     { label: 'تقييم العملاء العام', val: '٤.٩ ★' }
   ];
 
-  const tasks = [
-    { id: '101', partner: 'مطعم البيك الرواد', client: 'عبدالعزيز الحربي', pickup: 'حي الملقا، الرياض', dropoff: 'حي الياسمين، الرياض', price: '١٢.٠٠ ر.س', status: 'delivering' },
-    { id: '102', partner: 'صيدلية النهدي الصحافة', client: 'فهد المطيري', pickup: 'حي الصحافة، الرياض', dropoff: 'حي الملقا، الرياض', price: '١٥.٠٠ ر.س', status: 'pending' }
-  ];
+  // Sync tasks dynamically from live DB
+  const fetchTasks = async () => {
+    try {
+      setLoading(true);
+      const { data, error } = await supabase
+        .from('orders')
+        .select('*');
+      
+      if (!error && data) {
+        // Query orders that are pending, preparing, out_for_delivery where driver is null OR this driver!
+        const relevant = data.filter((o: any) => 
+          (o.status !== 'delivered' && o.status !== 'تم التوصيل' && o.status !== 'cancelled' && o.status !== 'ملغي') &&
+          (!o.driver_id || o.driver_id === driverId)
+        );
+        
+        const mapped = relevant.map((o: any) => ({
+          id: o.id,
+          partner: o.pickup_location?.split(' - ')[0] || 'مطعم البيك الرواد',
+          client: o.customer_name || 'عبدالعزيز الحربي',
+          pickup: o.pickup_location || 'حي الملقا، الرياض',
+          dropoff: o.dropoff_location || 'حي الياسمين، الرياض',
+          price: `${o.delivery_fee || 12} ر.س`,
+          status: o.driver_id === driverId ? 'delivering' : 'pending'
+        }));
+        setTasks(mapped);
+      }
+    } catch (e) {
+      console.log('Error fetching driver tasks:', e);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchTasks();
+
+    const channel = supabase.channel('realtime:driver_tasks')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, () => {
+        fetchTasks();
+      })
+      .subscribe();
+
+    return () => {
+      channel.unsubscribe();
+    };
+  }, []);
+
+  const handleAcceptTask = async (taskId: string) => {
+    try {
+      const { error } = await supabase
+        .from('orders')
+        .update({
+          driver_id: driverId,
+          driver_name: driverName,
+          driver_phone: driverPhone,
+          driver_vehicle: driverVehicle,
+          status: 'out_for_delivery'
+        })
+        .eq('id', taskId);
+
+      if (!error) {
+        // Upsert driver location start point
+        await supabase
+          .from('driver_locations')
+          .upsert({
+            driver_id: driverId,
+            latitude: 24.7136,
+            longitude: 46.6753,
+            heading: 45.0,
+            speed: 35.0,
+            updated_at: new Date().toISOString()
+          });
+
+        alert('تم قبول مهمة التوصيل وتحديث إحداثيات المندوب بنجاح! 🛵');
+        fetchTasks();
+      }
+    } catch (err) {
+      console.error('Error accepting task:', err);
+    }
+  };
+
+  const handleUpdateLocation = async () => {
+    try {
+      const nextLat = 24.7136 + (Math.random() - 0.5) * 0.05;
+      const nextLng = 46.6753 + (Math.random() - 0.5) * 0.05;
+
+      const { error } = await supabase
+        .from('driver_locations')
+        .upsert({
+          driver_id: driverId,
+          latitude: nextLat,
+          longitude: nextLng,
+          heading: Math.random() * 360,
+          speed: Math.round(25 + Math.random() * 30),
+          updated_at: new Date().toISOString()
+        });
+
+      if (!error) {
+        alert('تم تحديث موقعك المندوب الجغرافي بنجاح! 📍');
+      }
+    } catch (err) {
+      console.error('Error updating driver location:', err);
+    }
+  };
+
+  const handleCompleteTask = async (taskId: string) => {
+    try {
+      const { error } = await supabase
+        .from('orders')
+        .update({
+          status: 'delivered'
+        })
+        .eq('id', taskId);
+
+      if (!error) {
+        // Delete location record on completion to hide location
+        await supabase.from('driver_locations').delete().eq('driver_id', driverId);
+        alert('تم توصيل وتسليم الشحنة للعميل بنجاح! 🏁');
+        fetchTasks();
+      }
+    } catch (err) {
+      console.error('Error completing task:', err);
+    }
+  };
 
   return (
     <div style={{ background: '#120b1f', minHeight: '100vh', color: 'white', display: 'flex', fontFamily: 'Cairo, sans-serif', direction: 'rtl' }}>
@@ -121,8 +250,13 @@ export const DriverDashboard = ({ onBack, defaultTab, hideSidebar = false }: { o
 
                   <div style={{ display: 'flex', gap: 10, marginTop: 12, justifyContent: 'space-between', alignItems: 'center' }}>
                     <span style={{ fontSize: '1rem', fontWeight: 900, color: 'var(--color-accent-light)' }}>رسوم التوصيل: {t.price}</span>
-                    {t.status !== 'delivering' && (
-                      <button className="btn btn-primary" style={{ padding: '8px 20px', fontSize: '0.8rem' }} onClick={() => alert('تم قبول مهمة التوصيل بنجاح! 🛵')}>قبول الطلب والتوجه للمتجر</button>
+                    {t.status !== 'delivering' ? (
+                      <button className="btn btn-primary" style={{ padding: '8px 20px', fontSize: '0.8rem' }} onClick={() => handleAcceptTask(t.id)}>قبول الطلب والتوجه للمتجر</button>
+                    ) : (
+                      <div style={{ display: 'flex', gap: 10 }}>
+                        <button className="btn btn-primary" style={{ padding: '6px 14px', fontSize: '0.78rem', background: '#c084fc', border: 'none' }} onClick={handleUpdateLocation}>تحديث الموقع الجغرافي 📍</button>
+                        <button className="btn btn-primary" style={{ padding: '6px 14px', fontSize: '0.78rem', background: '#10b981', border: 'none' }} onClick={() => handleCompleteTask(t.id)}>تم تسليم الطلب 🏁</button>
+                      </div>
                     )}
                   </div>
                 </div>
