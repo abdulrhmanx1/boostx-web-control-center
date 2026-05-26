@@ -1,46 +1,181 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { 
   Hammer, Clock, Plus, BarChart2, DollarSign, Settings, ArrowRight, User, Phone, MapPin, Check
 } from 'lucide-react';
+import { supabase } from '../../supabaseClient';
 
 export const TechnicianDashboard = ({ onBack, defaultTab, hideSidebar = false }: { onBack?: () => void, defaultTab?: string, hideSidebar?: boolean }) => {
   const [activeTab, setActiveTab] = useState(defaultTab || 'dashboard');
   const [isAvailable, setIsAvailable] = useState(true);
   
+  // Resolve current technician identity from sandbox session or default
+  const [technicianId] = useState(() => {
+    const saved = localStorage.getItem('BX_SANDBOX_SESSION');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (parsed.user && parsed.user.role === 'technician') {
+          return parsed.user.id;
+        }
+      } catch (e) {
+        console.error(e);
+      }
+    }
+    return 'tech_usr_1';
+  });
+
+  const [techName, setTechName] = useState('أحمد محمد (فني سباكة معتمد)');
+
   // Services
-  const [services, setServices] = useState([
-    { id: 1, name: 'إصلاح تسريبات المياه والصنابير', price: 65, duration: '٤٥ دقيقة' },
-    { id: 2, name: 'تسليك مجاري الصرف الصحي والانسدادات', price: 95, duration: '٦٠ دقيقة' },
-    { id: 3, name: 'تركيب خلاطات مياه ومغاسل جديدة', price: 150, duration: '٩٠ دقيقة' }
-  ]);
+  const [services, setServices] = useState<any[]>([]);
   const [newServiceName, setNewServiceName] = useState('');
   const [newServicePrice, setNewServicePrice] = useState('');
   const [newServiceDuration, setNewServiceDuration] = useState('٦٠ دقيقة');
 
   // Bookings
-  const [bookings, setBookings] = useState([
-    { id: 'booking-1', client: 'عبدالرحمن الشهري', phone: '+966551234567', service: 'إصلاح تسريبات المياه والصنابير', date: 'اليوم، ٠٥:٣٠ م', location: 'حي الصحافة، الرياض', status: 'pending' },
-    { id: 'booking-2', client: 'سارة الدوسري', phone: '+966552345678', service: 'تركيب خلاطات مياه ومغاسل جديدة', date: 'غداً، ١٠:٠٠ ص', location: 'حي الملقا، الرياض', status: 'pending' }
-  ]);
+  const [bookings, setBookings] = useState<any[]>([]);
 
-  const handleAddService = () => {
+  // Fetch data dynamically and setup Realtime listeners
+  useEffect(() => {
+    const fetchTechnicianProfile = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('user_profiles')
+          .select('*')
+          .eq('id', technicianId)
+          .single();
+        if (!error && data) {
+          setTechName(`${data.full_name} (فني صيانة معتمد)`);
+        }
+      } catch (err) {
+        console.error('Error fetching technician profile:', err);
+      }
+    };
+
+    const fetchServices = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('technician_services')
+          .select('*')
+          .eq('technician_id', technicianId);
+        if (!error && data) {
+          setServices(data);
+        }
+      } catch (err) {
+        console.error('Error fetching services:', err);
+      }
+    };
+
+    const fetchBookings = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('service_bookings')
+          .select('*')
+          .eq('technician_id', technicianId)
+          .order('booking_date', { ascending: false });
+        if (!error && data) {
+          const mappedBookings = data.map((b: any) => ({
+            id: b.id,
+            client: b.customer_name || 'عميل مجهول',
+            phone: b.customer_phone || '',
+            service: b.service_name || '',
+            date: b.booking_date || '',
+            location: b.location || '',
+            status: b.status || 'pending'
+          }));
+          setBookings(mappedBookings);
+        }
+      } catch (err) {
+        console.error('Error fetching bookings:', err);
+      }
+    };
+
+    fetchTechnicianProfile();
+    fetchServices();
+    fetchBookings();
+
+    // Subscribe to realtime database changes for services and bookings
+    const servicesChannel = supabase
+      .channel(`realtime:technician_services:${technicianId}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'technician_services', filter: `technician_id=eq.${technicianId}` }, () => {
+        fetchServices();
+      })
+      .subscribe();
+
+    const bookingsChannel = supabase
+      .channel(`realtime:service_bookings:${technicianId}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'service_bookings', filter: `technician_id=eq.${technicianId}` }, () => {
+        fetchBookings();
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(servicesChannel);
+      supabase.removeChannel(bookingsChannel);
+    };
+  }, [technicianId]);
+
+  const handleAddService = async () => {
     if (!newServiceName || !newServicePrice) return;
     const newService = {
-      id: Date.now(),
+      id: 'ts-' + Date.now(),
+      technician_id: technicianId,
       name: newServiceName,
       price: parseFloat(newServicePrice),
-      duration: newServiceDuration
+      duration: newServiceDuration,
+      is_active: true
     };
-    setServices(prev => [...prev, newService]);
-    setNewServiceName('');
-    setNewServicePrice('');
-    alert('تمت إضافة الخدمة بنجاح! 🛠️');
+
+    try {
+      const { error } = await supabase
+        .from('technician_services')
+        .insert(newService);
+      if (error) {
+        alert('خطأ أثناء إضافة الخدمة: ' + error.message);
+      } else {
+        setNewServiceName('');
+        setNewServicePrice('');
+        alert('تمت إضافة الخدمة بنجاح! 🛠️');
+      }
+    } catch (err: any) {
+      console.error(err);
+      alert('خطأ غير متوقع.');
+    }
   };
 
-  const handleAcceptBooking = (id: string) => {
-    setBookings(prev => prev.map(b => b.id === id ? { ...b, status: 'accepted' } : b));
-    alert('تم قبول حجز العميل وتوثيق موعد الزيارة بنجاح! 📅');
+  const handleAcceptBooking = async (id: string) => {
+    try {
+      const { error } = await supabase
+        .from('service_bookings')
+        .update({ status: 'accepted' })
+        .eq('id', id);
+      if (error) {
+        alert('حدث خطأ أثناء قبول الحجز: ' + error.message);
+      } else {
+        alert('تم قبول حجز العميل وتوثيق موعد الزيارة بنجاح! 📅');
+      }
+    } catch (err: any) {
+      console.error(err);
+      alert('خطأ غير متوقع.');
+    }
+  };
+
+  const handleRejectBooking = async (id: string) => {
+    try {
+      const { error } = await supabase
+        .from('service_bookings')
+        .update({ status: 'rejected' })
+        .eq('id', id);
+      if (error) {
+        alert('حدث خطأ أثناء رفض الحجز: ' + error.message);
+      } else {
+        alert('تم رفض حجز العميل بنجاح.');
+      }
+    } catch (err: any) {
+      console.error(err);
+      alert('خطأ غير متوقع.');
+    }
   };
 
   return (
@@ -96,7 +231,7 @@ export const TechnicianDashboard = ({ onBack, defaultTab, hideSidebar = false }:
         {/* Top Header */}
         <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 30 }}>
           <div>
-            <h1 style={{ fontSize: '1.6rem', fontWeight: 900, margin: 0 }}>أحمد محمد (فني سباكة معتمد)</h1>
+            <h1 style={{ fontSize: '1.6rem', fontWeight: 900, margin: 0 }}>{techName}</h1>
             <p style={{ color: 'var(--color-text-muted)', fontSize: '0.84rem', margin: '4px 0 0 0' }}>حي الصحافة والملقا والياسمين • الرياض</p>
           </div>
           <button 
@@ -128,15 +263,15 @@ export const TechnicianDashboard = ({ onBack, defaultTab, hideSidebar = false }:
                       <h4 style={{ fontSize: '1.1rem', fontWeight: 800, color: 'white', margin: 0 }}>{b.service}</h4>
                       <p style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)', margin: '4px 0 0 0' }}>العميل: {b.client} • {b.phone} • {b.location}</p>
                     </div>
-                    <span style={{ fontSize: '0.75rem', background: b.status === 'accepted' ? 'rgba(16,185,129,0.15)' : 'rgba(245,158,11,0.15)', color: b.status === 'accepted' ? 'var(--color-success)' : '#f59e0b', padding: '4px 12px', borderRadius: 'var(--radius-pill)', fontWeight: 800 }}>
-                      {b.status === 'accepted' ? 'تم القبول والجدولة 📅' : 'حجز معلق'}
+                    <span style={{ fontSize: '0.75rem', background: b.status === 'accepted' ? 'rgba(16,185,129,0.15)' : b.status === 'rejected' ? 'rgba(239, 68, 68, 0.15)' : 'rgba(245,158,11,0.15)', color: b.status === 'accepted' ? 'var(--color-success)' : b.status === 'rejected' ? '#ef4444' : '#f59e0b', padding: '4px 12px', borderRadius: 'var(--radius-pill)', fontWeight: 800 }}>
+                      {b.status === 'accepted' ? 'تم القبول والجدولة 📅' : b.status === 'rejected' ? 'تم الرفض ❌' : 'حجز معلق'}
                     </span>
                   </div>
 
-                  {b.status !== 'accepted' && (
+                  {b.status === 'pending' && (
                     <div style={{ display: 'flex', gap: 10, marginTop: 12 }}>
                       <button className="btn btn-primary" style={{ padding: '8px 20px', fontSize: '0.8rem' }} onClick={() => handleAcceptBooking(b.id)}>الموافقة والجدولة</button>
-                      <button className="btn btn-secondary" style={{ padding: '8px 20px', fontSize: '0.8rem', color: '#ef4444' }} onClick={() => alert('تم رفض حجز العميل.')}>رفض الموعد</button>
+                      <button className="btn btn-secondary" style={{ padding: '8px 20px', fontSize: '0.8rem', color: '#ef4444' }} onClick={() => handleRejectBooking(b.id)}>رفض الموعد</button>
                     </div>
                   )}
                 </div>
