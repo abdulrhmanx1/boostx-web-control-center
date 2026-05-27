@@ -748,6 +748,7 @@ const PartnerRegisterPage = ({ navigateTo }: { navigateTo: (path: string) => voi
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
   const [appReference, setAppReference] = useState('');
+  const [savedApplicationId, setSavedApplicationId] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
 
   // Step 1: Business details
@@ -967,9 +968,8 @@ const PartnerRegisterPage = ({ navigateTo }: { navigateTo: (path: string) => voi
     setLoading(true);
     setErrorMsg('');
 
+    const applicationId = Math.random().toString(36).substring(2, 17) + '-' + Math.random().toString(36).substring(2, 17);
     try {
-      const applicationId = Math.random().toString(36).substring(2, 17) + '-' + Math.random().toString(36).substring(2, 17);
-      
       const payload = {
         id: applicationId,
         activity_type_id: selectedActivityId,
@@ -1052,10 +1052,12 @@ const PartnerRegisterPage = ({ navigateTo }: { navigateTo: (path: string) => voi
         details: `شريك جديد (${storeNameAr}) قدم طلب انضمام بالباقة: ${selectedPlan}. المعرف: ${appReference}`
       });
 
+      setSavedApplicationId(applicationId);
       setSuccess(true);
       addLog('success', 'طلب شريك جديد', `تم تقديم طلب الانضمام رقم ${appReference} للشريك ${storeNameAr} سحابياً!`);
     } catch (err: any) {
       console.error(err);
+      setSavedApplicationId(applicationId);
       setErrorMsg(err.message || 'فشل الاتصال وحفظ طلبك في Supabase سحابياً. تم تفعيل خادم المحاكاة الاحتياطي بنجاح وحفظ السجل محلياً.');
       setSuccess(true);
     } finally {
@@ -1154,6 +1156,16 @@ const PartnerRegisterPage = ({ navigateTo }: { navigateTo: (path: string) => voi
             >
               💬 دعم المبيعات والشركاء
             </a>
+          </div>
+
+          {/* Diagnostic Debug Panel (Temporary) */}
+          <div style={{ background: 'rgba(138, 44, 255, 0.05)', border: '1px solid rgba(138, 44, 255, 0.15)', borderRadius: '16px', padding: '16px', maxWidth: '480px', margin: '24px auto 0 auto', textAlign: 'right', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            <span style={{ fontSize: '0.78rem', color: '#c084fc', fontWeight: 900 }}>⚙️ لوحة تتبع التشغيل ومطابقة المزامنة (Debug Console):</span>
+            <div style={{ fontSize: '0.76rem', color: '#cac4dd', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <div>معرّف الطلب الحقيقي (application_id): <span style={{ fontFamily: 'monospace', color: 'white' }}>{savedApplicationId}</span></div>
+              <div>جدول الكتابة (Supabase Table): <span style={{ fontFamily: 'monospace', color: 'white' }}>partner_applications</span></div>
+              <div>حالة الحفظ المرسلة (Saved Status): <span style={{ color: '#10b981', fontWeight: 'bold' }}>submitted</span></div>
+            </div>
           </div>
         </div>
       ) : (

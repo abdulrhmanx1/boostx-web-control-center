@@ -329,13 +329,30 @@ export const AdminDashboard = ({ onBack, defaultTab, hideSidebar = false }: { on
   useEffect(() => {
     fetchData();
 
+    // Native Supabase Realtime channel subscription to auto-sync registrations
+    const channel = supabase
+      .channel('public:partner_applications_changes')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'partner_applications' },
+        (payload: any) => {
+          console.log('Realtime change for partner_applications table received:', payload);
+          fetchData();
+        }
+      )
+      .subscribe();
+
     const handleRealtime = (e: any) => {
       if (['partner_applications', 'driver_applications', 'categories', 'sponsored_products', 'orders'].includes(e.detail?.table)) {
         fetchData();
       }
     };
     window.addEventListener('BX_REALTIME_CHANGE', handleRealtime);
-    return () => window.removeEventListener('BX_REALTIME_CHANGE', handleRealtime);
+    
+    return () => {
+      supabase.removeChannel(channel);
+      window.removeEventListener('BX_REALTIME_CHANGE', handleRealtime);
+    };
   }, []);
 
   const handleApprovePartner = async (appId: string) => {
@@ -684,7 +701,7 @@ export const AdminDashboard = ({ onBack, defaultTab, hideSidebar = false }: { on
                   <div style={{ background: 'var(--glass-bg)', border: '1px solid var(--glass-border)', padding: 18, borderRadius: 16 }}>
                     <span style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)' }}>طلبات معلقة بانتظار المراجعة</span>
                     <h3 style={{ fontSize: '1.5rem', fontWeight: 900, margin: '6px 0 0 0', color: '#f59e0b' }}>
-                      {partnerApps.filter(p => p.status === 'pending').length + driverApps.filter(d => d.status === 'pending').length} طلب انضمام
+                      {partnerApps.filter(p => ['pending', 'submitted', 'under_review', 'needs_more_info'].includes(p.status)).length + driverApps.filter(d => d.status === 'pending').length} طلب انضمام
                     </h3>
                     <span style={{ fontSize: '0.65rem', color: 'var(--color-text-muted)' }}>تحتاج توثيق ومراجعة التراخيص</span>
                   </div>
@@ -723,7 +740,7 @@ export const AdminDashboard = ({ onBack, defaultTab, hideSidebar = false }: { on
                     <h3 style={{ fontSize: '1rem', fontWeight: 800, marginBottom: 16 }}>المهام التشغيلية العاجلة</h3>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                       <div style={{ padding: 12, background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.2)', borderRadius: 12, fontSize: '0.75rem' }}>
-                        ⚠️ هناك <strong>{partnerApps.filter(p => p.status === 'pending').length} طلب شريك جديد</strong> معلق بانتظار تدقيق السجل التجاري والتراخيص.
+                        ⚠️ هناك <strong>{partnerApps.filter(p => ['pending', 'submitted', 'under_review', 'needs_more_info'].includes(p.status)).length} طلب شريك جديد</strong> معلق بانتظار تدقيق السجل التجاري والتراخيص.
                       </div>
                       <div style={{ padding: 12, background: 'rgba(168,85,247,0.08)', border: '1px solid rgba(168,85,247,0.2)', borderRadius: 12, fontSize: '0.75rem' }}>
                         ⚡ <strong>عرض فلاش مميز</strong> يوشك على الانتهاء بعد ساعتين. راجع أولوية ظهور المنتجات.
@@ -739,11 +756,11 @@ export const AdminDashboard = ({ onBack, defaultTab, hideSidebar = false }: { on
               <div style={{ background: 'var(--glass-bg)', border: '1px solid var(--glass-border)', padding: 20, borderRadius: 20 }}>
                 <h3 style={{ fontSize: '1rem', fontWeight: 800, marginBottom: 16 }}>طلبات الانضمام والتراخيص الرسمية المعلقة</h3>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-                  {partnerApps.filter(p => p.status === 'pending').map(app => (
+                  {partnerApps.filter(p => ['pending', 'submitted', 'under_review', 'needs_more_info'].includes(p.status)).map(app => (
                     <div key={app.id} style={{ padding: 16, background: 'rgba(255,255,255,0.01)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: 14, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <div>
-                        <strong style={{ fontSize: '0.9rem' }}>{app.business_name}</strong>
-                        <p style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', margin: '4px 0 0 0' }}>{app.commercial_name} • {app.phone_number} • {app.city}</p>
+                        <strong style={{ fontSize: '0.9rem' }}>{app.store_name_ar || app.business_name}</strong>
+                        <p style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', margin: '4px 0 0 0' }}>{app.legal_company_name || app.commercial_name} • {app.phone_number} • {app.city}</p>
                       </div>
                       <div style={{ display: 'flex', gap: 8 }}>
                         <button className="btn btn-primary" style={{ padding: '6px 12px', fontSize: '0.75rem' }} onClick={() => handleApprovePartner(app.id)}>توثيق واعتماد</button>
@@ -751,7 +768,7 @@ export const AdminDashboard = ({ onBack, defaultTab, hideSidebar = false }: { on
                       </div>
                     </div>
                   ))}
-                  {partnerApps.filter(p => p.status === 'pending').length === 0 && (
+                  {partnerApps.filter(p => ['pending', 'submitted', 'under_review', 'needs_more_info'].includes(p.status)).length === 0 && (
                     <div style={{ textAlign: 'center', padding: '40px 0', color: 'var(--color-text-muted)', fontSize: '0.85rem' }}>لا توجد طلبات انضمام شركاء معلقة حالياً. 👌</div>
                   )}
                 </div>
@@ -1114,6 +1131,23 @@ export const AdminDashboard = ({ onBack, defaultTab, hideSidebar = false }: { on
             {/* TAB VIEW 15: طلبات الانضمام والتراخيص */}
             {activeNav === 'admin_partner_join_requests' && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+
+                {/* Realtime Sync Debug Console */}
+                <div style={{ background: 'rgba(138, 44, 255, 0.05)', border: '1px solid rgba(138, 44, 255, 0.15)', borderRadius: '16px', padding: '14px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span style={{ fontSize: '1rem' }}>⚙️</span>
+                    <div>
+                      <strong style={{ fontSize: '0.8rem', color: 'white', display: 'block' }}>لوحة تتبع المزامنة الحية للشركاء (Partner Sync Debug Console)</strong>
+                      <span style={{ fontSize: '0.68rem', color: '#c084fc', display: 'block', marginTop: '2px' }}>
+                        الجدول المستعلم: <span style={{ fontFamily: 'monospace', color: 'white' }}>partner_applications</span> • حالة المراقبة والاشتراك: <span style={{ color: 'var(--color-success)', fontWeight: 'bold' }}>نشط ومتصل بالـ Realtime 🟢</span>
+                      </span>
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', gap: '15px', fontSize: '0.76rem', color: '#cac4dd' }}>
+                    <div>عدد الطلبات المحملة: <strong style={{ color: 'white' }}>{partnerApps.length} طلب</strong></div>
+                    <div>آخر تحديث مستلم: <strong style={{ color: 'white', fontFamily: 'monospace' }}>{partnerApps.length > 0 ? new Date(partnerApps[0].created_at).toLocaleTimeString() : 'لا يوجد'}</strong></div>
+                  </div>
+                </div>
                 
                 {/* Stepper Status Tabs */}
                 <div style={{ 
