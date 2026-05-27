@@ -87,6 +87,28 @@ export const AdminDashboard = ({ onBack, defaultTab, hideSidebar = false }: { on
   const [orders, setOrders] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
 
+  // Onboarding & Activity Types States
+  const [activityTypes, setActivityTypes] = useState<any[]>(() => {
+    const saved = localStorage.getItem('BX_SANDBOX_ACTIVITY_TYPES');
+    return saved ? JSON.parse(saved) : [
+      { id: '1', name_ar: 'مطعم أو مقهى', name_en: 'Restaurant / Cafe', icon: 'Utensils', description: 'المطاعم والكافيهات ومحلات الوجبات السريعة', is_registration_open: true, is_active: true, sort_order: 1 },
+      { id: '2', name_ar: 'صيدلية أو مستحضرات طبية', name_en: 'Pharmacy', icon: 'Pills', description: 'الصيدليات والمستلزمات الطبية والجمالية', is_registration_open: true, is_active: true, sort_order: 2 },
+      { id: '3', name_ar: 'تموينات أو سوبر ماركت', name_en: 'Grocery / Supermarket', icon: 'ShoppingBag', description: 'البقالات والتموينات الغذائية والسلع الإستهلاكية', is_registration_open: true, is_active: true, sort_order: 3 },
+      { id: '4', name_ar: 'مطبوعات ودعاية وإعلان', name_en: 'Advertising / Printing', icon: 'Printer', description: 'المطابع وتصميم اللوحات والهدايا الدعائية', is_registration_open: true, is_active: true, sort_order: 4 }
+    ];
+  });
+  const [selectedApp, setSelectedApp] = useState<any>(null);
+  const [showApproveModal, setShowApproveModal] = useState(false);
+  const [initialUsername, setInitialUsername] = useState('');
+  const [initialPasswordTemp, setInitialPasswordTemp] = useState('');
+  const [adminNotes, setAdminNotes] = useState('');
+  const [appFilterStatus, setAppFilterStatus] = useState('all');
+
+  // Activity Type Editing States
+  const [editingActivity, setEditingActivity] = useState<any>(null);
+  const [activityForm, setActivityForm] = useState({ name_ar: '', name_en: '', icon: 'Utensils', description: '', sort_order: 1 });
+  const [showActivityModal, setShowActivityModal] = useState(false);
+
   // Search & Filters
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
@@ -178,6 +200,10 @@ export const AdminDashboard = ({ onBack, defaultTab, hideSidebar = false }: { on
     localStorage.setItem('boostx_push_logs', JSON.stringify(pushLogs));
   }, [pushLogs]);
 
+  useEffect(() => {
+    localStorage.setItem('BX_SANDBOX_ACTIVITY_TYPES', JSON.stringify(activityTypes));
+  }, [activityTypes]);
+
   // Fetch from Supabase
   const fetchData = async () => {
     setLoading(true);
@@ -187,12 +213,14 @@ export const AdminDashboard = ({ onBack, defaultTab, hideSidebar = false }: { on
       const { data: cats } = await supabase.from('categories').select('*');
       const { data: sps } = await supabase.from('sponsored_products').select('*');
       const { data: ords } = await supabase.from('orders').select('*').order('created_at', { ascending: false });
+      const { data: activities } = await supabase.from('business_activity_types').select('*').order('sort_order', { ascending: true });
 
       if (partners) setPartnerApps(partners);
       if (drivers) setDriverApps(drivers);
       if (cats) setCategories(cats);
       if (sps) setSponsoredProducts(sps);
       if (ords) setOrders(ords);
+      if (activities && activities.length > 0) setActivityTypes(activities);
     } catch (e) {
       console.log('Using sandbox simulation data fallback.');
     } finally {
@@ -358,6 +386,7 @@ export const AdminDashboard = ({ onBack, defaultTab, hideSidebar = false }: { on
       items: [
         { id: 'admin_partners', label: 'دليل الشركاء المعتمدين', icon: UsersRound },
         { id: 'admin_partner_join_requests', label: 'طلبات الانضمام والتراخيص', icon: UserPlus },
+        { id: 'admin_activity_types', label: 'إدارة أنواع الأنشطة', icon: ListCollapse },
         { id: 'admin_partner_products', label: 'المنتجات والخدمات التابعة', icon: PackageOpen },
         { id: 'admin_partner_offers', label: 'عروض وتخفيضات الشركاء', icon: Tag },
         { id: 'admin_partner_campaigns', label: 'حملات الشركاء التسويقية', icon: Percent },
@@ -986,34 +1015,665 @@ export const AdminDashboard = ({ onBack, defaultTab, hideSidebar = false }: { on
 
             {/* TAB VIEW 15: طلبات الانضمام والتراخيص */}
             {activeNav === 'admin_partner_join_requests' && (
-              <div style={{ background: 'var(--glass-bg)', border: '1px solid var(--glass-border)', padding: 20, borderRadius: 20 }}>
-                <h3 style={{ fontSize: '1rem', fontWeight: 800, marginBottom: 16 }}>طلبات الانضمام وتدقيق المستندات والتراخيص التجارية</h3>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-                  {partnerApps.map(app => (
-                    <div key={app.id} style={{ padding: 16, background: 'rgba(255,255,255,0.01)', border: '1px solid rgba(255,255,255,0.04)', borderRadius: 14 }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <div>
-                          <strong style={{ fontSize: '0.95rem' }}>{app.business_name}</strong>
-                          <span style={{ display: 'block', fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>{app.commercial_name} • {app.phone_number}</span>
-                        </div>
-                        <span style={{ fontSize: '0.75rem', background: app.status === 'verified' ? 'rgba(16,185,129,0.15)' : 'rgba(245,158,11,0.15)', color: app.status === 'verified' ? 'var(--color-success)' : '#f59e0b', padding: '4px 12px', borderRadius: '30px' }}>
-                          {app.status === 'verified' ? 'معتمد وموثق ✅' : 'معلق للمراجعة'}
-                        </span>
-                      </div>
-                      
-                      <div style={{ display: 'flex', gap: 10, margin: '12px 0' }}>
-                        <a href={app.cr_document_url} target="_blank" rel="noreferrer" style={{ fontSize: '0.75rem', background: 'rgba(255,255,255,0.03)', padding: '6px 12px', borderRadius: 8 }}>📄 السجل التجاري</a>
-                        <a href={app.owner_id_url} target="_blank" rel="noreferrer" style={{ fontSize: '0.75rem', background: 'rgba(255,255,255,0.03)', padding: '6px 12px', borderRadius: 8 }}>📄 هوية المالك</a>
-                      </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+                
+                {/* Stepper Status Tabs */}
+                <div style={{ 
+                  background: 'var(--glass-bg)', 
+                  border: '1px solid var(--glass-border)', 
+                  padding: '12px 20px', 
+                  borderRadius: 20,
+                  display: 'flex',
+                  gap: 8,
+                  overflowX: 'auto'
+                }}>
+                  {[
+                    { key: 'all', label: 'الكل' },
+                    { key: 'submitted', label: 'طلبات جديدة 📬' },
+                    { key: 'under_review', label: 'تحت المراجعة ⏳' },
+                    { key: 'needs_more_info', label: 'نواقص التراخيص ⚠️' },
+                    { key: 'approved', label: 'معتمد وموثق ✅' },
+                    { key: 'rejected', label: 'مرفوض ❌' }
+                  ].map(tab => {
+                    const count = tab.key === 'all' 
+                      ? partnerApps.length 
+                      : partnerApps.filter(p => p.status === tab.key).length;
+                    const isActive = appFilterStatus === tab.key;
+                    return (
+                      <button
+                        key={tab.key}
+                        onClick={() => { setAppFilterStatus(tab.key); setSelectedApp(null); }}
+                        style={{
+                          background: isActive ? 'rgba(168, 85, 247, 0.2)' : 'rgba(255,255,255,0.01)',
+                          border: isActive ? '1px solid rgba(168,85,247,0.4)' : '1px solid rgba(255,255,255,0.05)',
+                          color: isActive ? '#d8b4fe' : 'var(--color-text-muted)',
+                          padding: '6px 14px',
+                          borderRadius: '12px',
+                          fontSize: '0.8rem',
+                          fontWeight: 800,
+                          cursor: 'pointer',
+                          whiteSpace: 'nowrap',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '6px'
+                        }}
+                      >
+                        <span>{tab.label}</span>
+                        <span style={{ fontSize: '0.72rem', background: 'rgba(255,255,255,0.05)', padding: '2px 6px', borderRadius: '8px' }}>{count}</span>
+                      </button>
+                    );
+                  })}
+                </div>
 
-                      {app.status !== 'verified' && (
-                        <div style={{ display: 'flex', gap: 8 }}>
-                          <button className="btn btn-primary" style={{ padding: '6px 14px', fontSize: '0.75rem' }} onClick={() => handleApprovePartner(app.id)}>الموافقة والاعتماد الفوري</button>
-                          <button className="btn btn-secondary" style={{ padding: '6px 14px', fontSize: '0.75rem', color: '#ef4444' }} onClick={() => handleRejectPartner(app.id)}>رفض المستندات</button>
-                        </div>
+                <div style={{ display: 'grid', gridTemplateColumns: selectedApp ? '1fr 1fr' : '1fr', gap: 20 }}>
+                  
+                  {/* Applications List */}
+                  <div style={{ background: 'var(--glass-bg)', border: '1px solid var(--glass-border)', padding: 20, borderRadius: 20 }}>
+                    <h3 style={{ fontSize: '1rem', fontWeight: 900, marginBottom: 16 }}>ملفات طلبات الانضمام</h3>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                      {partnerApps
+                        .filter(app => appFilterStatus === 'all' ? true : app.status === appFilterStatus)
+                        .map(app => {
+                          const planText = app.selected_plan_id === 'plan_0' ? 'المجانية' : app.selected_plan_id === 'plan_1000' ? 'الأساسية' : app.selected_plan_id === 'plan_2000' ? 'النمو' : app.selected_plan_id === 'plan_3000' ? 'الاحترافية' : 'التميز';
+                          const isSelected = selectedApp?.id === app.id;
+                          return (
+                            <div 
+                              key={app.id} 
+                              onClick={() => { setSelectedApp(app); setAdminNotes(app.admin_notes || ''); }}
+                              style={{ 
+                                padding: 16, 
+                                background: isSelected ? 'rgba(168, 85, 247, 0.05)' : 'rgba(255,255,255,0.01)', 
+                                border: isSelected ? '1px solid rgba(168,85,247,0.3)' : '1px solid rgba(255,255,255,0.04)', 
+                                borderRadius: 16,
+                                cursor: 'pointer',
+                                transition: 'all 0.2s'
+                              }}
+                            >
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <div>
+                                  <strong style={{ fontSize: '0.94rem', color: 'white' }}>{app.store_name_ar || app.business_name}</strong>
+                                  <span style={{ display: 'block', fontSize: '0.74rem', color: 'var(--color-text-muted)', marginTop: '4px' }}>
+                                    {app.legal_company_name || app.commercial_name} • {app.whatsapp_number || app.phone_number}
+                                  </span>
+                                </div>
+                                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '6px' }}>
+                                  <span style={{ 
+                                    fontSize: '0.7rem', 
+                                    background: app.status === 'approved' || app.status === 'verified' ? 'rgba(16,185,129,0.15)' : app.status === 'under_review' ? 'rgba(59,130,246,0.15)' : app.status === 'needs_more_info' ? 'rgba(245,158,11,0.15)' : 'rgba(239,68,68,0.15)', 
+                                    color: app.status === 'approved' || app.status === 'verified' ? 'var(--color-success)' : app.status === 'under_review' ? '#60a5fa' : app.status === 'needs_more_info' ? '#fbbf24' : '#f87171', 
+                                    padding: '3px 10px', 
+                                    borderRadius: '20px',
+                                    fontWeight: 800
+                                  }}>
+                                    {app.status === 'approved' || app.status === 'verified' ? 'معتمد ✅' : app.status === 'under_review' ? 'تحت المراجعة ⏳' : app.status === 'needs_more_info' ? 'نواقص تراخيص ⚠️' : app.status === 'rejected' ? 'مرفوض ❌' : 'طلب جديد 📬'}
+                                  </span>
+                                  <span style={{ fontSize: '0.68rem', color: '#c084fc', fontWeight: 700 }}>باقة {planText}</span>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      {partnerApps.filter(app => appFilterStatus === 'all' ? true : app.status === appFilterStatus).length === 0 && (
+                        <div style={{ textAlign: 'center', padding: '30px 0', color: 'var(--color-text-muted)' }}>لا توجد طلبات انضمام تندرج تحت هذا الفلتر.</div>
                       )}
                     </div>
-                  ))}
+                  </div>
+
+                  {/* Application Detailed Review Panel */}
+                  {selectedApp && (
+                    <div style={{ background: 'var(--glass-bg)', border: '1px solid var(--glass-border)', padding: 24, borderRadius: 20, display: 'flex', flexDirection: 'column', gap: 20 }}>
+                      <div style={{ borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <h3 style={{ fontSize: '1.05rem', fontWeight: 900, color: 'white', margin: 0 }}>مراجعة وتدقيق المستندات والتراخيص</h3>
+                        <button onClick={() => setSelectedApp(null)} style={{ background: 'none', border: 'none', color: '#aaa3c2', fontSize: '0.8rem', cursor: 'pointer' }}>إغلاق ×</button>
+                      </div>
+
+                      {/* Business info table */}
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', fontSize: '0.8rem', color: '#cac4dd' }}>
+                        <div>اسم الشريك: <strong style={{ color: 'white' }}>{selectedApp.store_name_ar || selectedApp.business_name}</strong></div>
+                        <div>الاسم الإنجليزي: <span>{selectedApp.store_name_en || '-'}</span></div>
+                        <div>اسم الشركة القانوني: <span>{selectedApp.legal_company_name || selectedApp.commercial_name}</span></div>
+                        <div>السجل التجاري: <span style={{ fontFamily: 'monospace' }}>{selectedApp.commercial_registration_number || selectedApp.cr_document_url ? 'مرفق ومقروء' : '-'}</span></div>
+                        <div>البريد التجاري: <span>{selectedApp.business_email || selectedApp.email}</span></div>
+                        <div>جوال المدير المسؤول: <span>{selectedApp.phone_number || selectedApp.phone}</span></div>
+                        <div>واتساب النشاط: <span>{selectedApp.whatsapp_number || selectedApp.phone}</span></div>
+                        <div>المنطقة والحي: <span>{selectedApp.city} • {selectedApp.district}</span></div>
+                        <div style={{ gridColumn: 'span 2' }}>العنوان التفصيلي للفرع: <span>{selectedApp.full_address || '-'}</span></div>
+                        {selectedApp.google_maps_url && (
+                          <div style={{ gridColumn: 'span 2' }}>خرائط جوجل: <a href={selectedApp.google_maps_url} target="_blank" rel="noreferrer" style={{ color: '#c084fc', textDecoration: 'underline' }}>فتح الموقع الجغرافي 📍</a></div>
+                        )}
+                      </div>
+
+                      {/* Document uploads links */}
+                      <div style={{ background: 'rgba(255,255,255,0.01)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '16px', padding: '16px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                        <span style={{ fontSize: '0.78rem', color: '#aaa3c2', fontWeight: 900 }}>📄 المستندات والتراخيص المرفوعة:</span>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                          <a href={selectedApp.cr_document_url || selectedApp.payment_proof_url || '#'} target="_blank" rel="noreferrer" style={{ fontSize: '0.74rem', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.05)', padding: '8px 12px', borderRadius: '10px', textDecoration: 'none', color: 'white', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            📁 السجل التجاري (CR) ➔
+                          </a>
+                          <a href={selectedApp.owner_id_url || '#'} target="_blank" rel="noreferrer" style={{ fontSize: '0.74rem', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.05)', padding: '8px 12px', borderRadius: '10px', textDecoration: 'none', color: 'white', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            📁 هوية المالك الوطني ➔
+                          </a>
+                          <a href={selectedApp.municipal_license_url || '#'} target="_blank" rel="noreferrer" style={{ fontSize: '0.74rem', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.05)', padding: '8px 12px', borderRadius: '10px', textDecoration: 'none', color: 'white', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            📁 الترخيص البلدي للنشاط ➔
+                          </a>
+                          <a href={selectedApp.vat_certificate_url || '#'} target="_blank" rel="noreferrer" style={{ fontSize: '0.74rem', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.05)', padding: '8px 12px', borderRadius: '10px', textDecoration: 'none', color: 'white', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            📁 شهادة القيمة المضافة ➔
+                          </a>
+                        </div>
+                      </div>
+
+                      {/* Payment Proof details if paid plan */}
+                      {selectedApp.selected_plan_id !== 'plan_0' && (
+                        <div style={{ background: 'rgba(138,44,255,0.02)', border: '1px solid rgba(138,44,255,0.15)', borderRadius: '16px', padding: '16px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                          <span style={{ fontSize: '0.78rem', color: '#c084fc', fontWeight: 900 }}>💳 إثبات السداد المالي للتحويل:</span>
+                          <div style={{ fontSize: '0.74rem', color: '#cac4dd', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px' }}>
+                            <div>وسيلة التحويل: <strong>{selectedApp.payment_method === 'insta_pay' ? 'InstaPay' : 'Vodafone Cash'}</strong></div>
+                            <div>صاحب الحساب: <span>{selectedApp.sender_name || 'مرسل الشريك'}</span></div>
+                            <div>رقم جوال المحول: <span>{selectedApp.sender_phone || selectedApp.phone_number}</span></div>
+                            {selectedApp.payment_reference && <div>كود العملية: <span style={{ fontFamily: 'monospace' }}>{selectedApp.payment_reference}</span></div>}
+                            {selectedApp.payment_proof_url && (
+                              <div style={{ gridColumn: 'span 2', marginTop: '6px' }}>
+                                <a href={selectedApp.payment_proof_url} target="_blank" rel="noreferrer" style={{ color: '#c084fc', textDecoration: 'underline' }}>📂 فتح لقطة شاشة إيصال السداد ➔</a>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Admin Notes */}
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                        <label style={{ fontSize: '0.78rem', color: '#aaa3c2', fontWeight: 800 }}>ملاحظات وتوجيهات الإدارة والمدققين</label>
+                        <textarea 
+                          rows={2}
+                          value={adminNotes}
+                          onChange={(e) => setAdminNotes(e.target.value)}
+                          placeholder="اكتب أي ملاحظات أو أسباب الرفض أو النواقص المطلوبة من الشريك..."
+                          style={{ width: '100%', padding: '10px 14px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.02)', color: 'white', fontSize: '0.8rem' }}
+                        />
+                      </div>
+
+                      {/* Action buttons */}
+                      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '15px' }}>
+                        {selectedApp.status !== 'approved' && selectedApp.status !== 'verified' ? (
+                          <>
+                            <button 
+                              onClick={() => {
+                                // Pre-fill credentials helper
+                                const randomPass = Math.random().toString(36).substring(2, 10).toUpperCase();
+                                setInitialUsername(selectedApp.business_email || selectedApp.email || 'partner@boostx.sa');
+                                setInitialPasswordTemp(randomPass);
+                                setShowApproveModal(true);
+                              }}
+                              className="btn btn-primary" 
+                              style={{ padding: '8px 18px', fontSize: '0.8rem' }}
+                            >
+                              الموافقة واعتماد التراخيص ✔️
+                            </button>
+                            <button 
+                              onClick={async () => {
+                                try {
+                                  const { error } = await supabase.from('partner_applications').update({ status: 'needs_more_info', admin_notes: adminNotes }).eq('id', selectedApp.id);
+                                  if (error) throw error;
+                                  alert('تم إخطار الشريك بنواقص التراخيص بنجاح ⚠️');
+                                  setSelectedApp(null);
+                                  fetchData();
+                                } catch (e: any) { alert(e.message); }
+                              }}
+                              className="btn btn-secondary" 
+                              style={{ padding: '8px 16px', fontSize: '0.8rem', color: '#fbbf24', border: '1px solid rgba(245,158,11,0.3)' }}
+                            >
+                              طلب استكمال النواقص ⚠️
+                            </button>
+                            <button 
+                              onClick={async () => {
+                                try {
+                                  const { error } = await supabase.from('partner_applications').update({ status: 'rejected', admin_notes: adminNotes }).eq('id', selectedApp.id);
+                                  if (error) throw error;
+                                  alert('تم رفض طلب الانضمام ❌');
+                                  setSelectedApp(null);
+                                  fetchData();
+                                } catch (e: any) { alert(e.message); }
+                              }}
+                              className="btn btn-secondary" 
+                              style={{ padding: '8px 16px', fontSize: '0.8rem', color: '#f87171', border: '1px solid rgba(239,68,68,0.3)' }}
+                            >
+                              رفض الطلب ❌
+                            </button>
+                          </>
+                        ) : (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', width: '100%' }}>
+                            <span style={{ fontSize: '0.8rem', color: 'var(--color-success)', fontWeight: 800 }}>✓ تم اعتماد هذا الشريك سحابياً وتوثيق الفروع</span>
+                            {selectedApp.initial_username && (
+                              <div style={{ padding: '12px', background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '12px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                <span style={{ fontSize: '0.74rem', color: '#aaa3c2' }}>بيانات الدخول الصادرة للشريك:</span>
+                                <div style={{ fontSize: '0.76rem', color: 'white' }}>اسم المستخدم: <strong>{selectedApp.initial_username}</strong></div>
+                                <div style={{ fontSize: '0.76rem', color: 'white' }}>كلمة المرور المؤقتة: <strong style={{ color: '#c084fc', fontFamily: 'monospace' }}>{selectedApp.initial_password_temp}</strong></div>
+                                
+                                <div style={{ display: 'flex', gap: '8px', marginTop: '6px' }}>
+                                  <button 
+                                    onClick={() => {
+                                      const text = `🎉 أهلاً بك شريكنا العزيز بـ BoostX!\nتم قبول انضمام فرعك الموقر بنجاح.\nإليك بيانات الدخول بوابتك الرسمية:\n🔗 الرابط: https://boostxadv.com/portals\n👤 اسم المستخدم: ${selectedApp.initial_username}\n🔑 كلمة المرور المؤقتة: ${selectedApp.initial_password_temp}\n💡 يرجى تبديل كلمة المرور بعد أول تسجيل دخول.`;
+                                      navigator.clipboard.writeText(text);
+                                      alert('تم نسخ رسالة التفعيل والترحيب للـ WhatsApp بنجاح! 📱');
+                                    }}
+                                    style={{ background: 'rgba(16,185,129,0.15)', border: '1px solid rgba(16,185,129,0.3)', color: 'var(--color-success)', padding: '4px 10px', borderRadius: '8px', fontSize: '0.7rem', cursor: 'pointer', fontWeight: 800 }}
+                                  >
+                                    📋 نسخ رسالة WhatsApp الترحيبية
+                                  </button>
+                                  <button 
+                                    onClick={() => {
+                                      const text = `Subject: تم قبول انضمام متجرك في منصة BoostX!\n\nأهلاً بك شريكنا العزيز.\nتم قبول وتوثيق تراخيصك بنجاح.\n👤 اسم المستخدم: ${selectedApp.initial_username}\n🔑 كلمة المرور المؤقتة: ${selectedApp.initial_password_temp}`;
+                                      navigator.clipboard.writeText(text);
+                                      alert('تم نسخ رسالة البريد الإلكتروني للمسؤول! ✉️');
+                                    }}
+                                    style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: 'white', padding: '4px 10px', borderRadius: '8px', fontSize: '0.7rem', cursor: 'pointer', fontWeight: 800 }}
+                                  >
+                                    ✉️ نسخ رسالة البريد الإلكتروني
+                                  </button>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Approval Modal (Credentials Input Modal) */}
+            {showApproveModal && selectedApp && (
+              <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.8)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100000, padding: '24px', fontFamily: 'Cairo, sans-serif' }}>
+                <div style={{ background: '#181126', border: '1px solid rgba(138,44,255,0.2)', padding: '30px', borderRadius: '24px', maxWidth: '500px', width: '100%', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                  <h3 style={{ fontSize: '1.2rem', fontWeight: 900, color: 'white', margin: 0 }}>تأكيد اعتماد الشريك وإصدار بيانات الدخول 🔑</h3>
+                  
+                  <p style={{ fontSize: '0.82rem', color: '#cac4dd', margin: 0, lineHeight: 1.5 }}>
+                    عند اعتماد الشريك، سيقوم النظام تلقائياً بإنشاء حساب شريك جديد، وإنشاء الملف التجاري بـ `partners` وتفعيل باقة الاشتراك المحددة.
+                  </p>
+
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    <label style={{ fontSize: '0.8rem', color: '#aaa3c2', fontWeight: 800 }}>اسم المستخدم الأول (البريد الإلكتروني للنشاط)</label>
+                    <input 
+                      type="text" 
+                      value={initialUsername}
+                      onChange={(e) => setInitialUsername(e.target.value)}
+                      style={{ padding: '10px 14px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.1)', background: '#120b1f', color: 'white', fontSize: '0.84rem' }}
+                    />
+                  </div>
+
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    <label style={{ fontSize: '0.8rem', color: '#aaa3c2', fontWeight: 800 }}>كلمة المرور المؤقتة الموزعة</label>
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                      <input 
+                        type="text" 
+                        value={initialPasswordTemp}
+                        onChange={(e) => setInitialPasswordTemp(e.target.value)}
+                        style={{ flexGrow: 1, padding: '10px 14px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.1)', background: '#120b1f', color: 'white', fontSize: '0.84rem', fontFamily: 'monospace' }}
+                      />
+                      <button 
+                        onClick={() => setInitialPasswordTemp(Math.random().toString(36).substring(2, 10).toUpperCase())}
+                        style={{ background: 'rgba(168,85,247,0.2)', border: '1px solid rgba(168,85,247,0.4)', color: '#d8b4fe', padding: '0 14px', borderRadius: '12px', fontSize: '0.74rem', fontWeight: 800, cursor: 'pointer' }}
+                      >
+                        توليد 🔑
+                      </button>
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '15px' }}>
+                    <button 
+                      onClick={() => setShowApproveModal(false)}
+                      style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: 'white', padding: '8px 20px', borderRadius: '10px', fontSize: '0.8rem', fontWeight: 800, cursor: 'pointer' }}
+                    >
+                      إلغاء
+                    </button>
+                    <button 
+                      onClick={async () => {
+                        if (!initialUsername || !initialPasswordTemp) {
+                          alert('الرجاء كتابة اسم المستخدم وكلمة المرور لتفعيل الحساب.');
+                          return;
+                        }
+                        setLoading(true);
+                        try {
+                          // 1. Update partner_applications table
+                          const { error: appErr } = await supabase
+                            .from('partner_applications')
+                            .update({
+                              status: 'approved',
+                              admin_notes: adminNotes,
+                              initial_username: initialUsername,
+                              initial_password_temp: initialPasswordTemp,
+                              approved_by: '00000000-0000-0000-0000-000000000000',
+                              approved_at: new Date().toISOString()
+                            })
+                            .eq('id', selectedApp.id);
+                          if (appErr) throw appErr;
+
+                          // 2. Create profile inside public.partners table
+                          const partnerId = 'p-' + Math.random().toString(36).substring(2, 10);
+                          const { error: partErr } = await supabase
+                            .from('partners')
+                            .insert({
+                              id: partnerId,
+                              name: selectedApp.store_name_ar || selectedApp.business_name,
+                              biz_type: selectedApp.selected_plan_id === 'plan_0' ? 'restaurant' : 'premium',
+                              city: selectedApp.city,
+                              district: selectedApp.district,
+                              image: 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=400&q=80',
+                              is_active: true,
+                              whatsapp: selectedApp.whatsapp_number,
+                              status: 'approved',
+                              owner_id: '00000000-0000-0000-0000-000000000000'
+                            });
+                          if (partErr) console.error('Error creating partner profile:', partErr);
+
+                          // 3. Create simulated auth user profile in user_profiles
+                          await supabase.from('user_profiles').insert({
+                            email: initialUsername,
+                            role: 'partner',
+                            full_name: selectedApp.responsible_person_name
+                          });
+
+                          // 4. Log prepared email/whatsapp notification logs
+                          await supabase.from('partner_application_notifications').insert([
+                            {
+                              application_id: selectedApp.id,
+                              channel: 'whatsapp',
+                              recipient: selectedApp.whatsapp_number || selectedApp.phone_number,
+                              message_body: `🎉 تم قبول انضمام فرعك بـ BoostX!\nاسم المستخدم: ${initialUsername}\nكلمة المرور المؤقتة: ${initialPasswordTemp}`,
+                              status: 'prepared'
+                            },
+                            {
+                              application_id: selectedApp.id,
+                              channel: 'email',
+                              recipient: selectedApp.business_email || selectedApp.email,
+                              message_body: `تم قبولك كشريك بـ BoostX.\nاسم المستخدم: ${initialUsername}\nكلمة المرور: ${initialPasswordTemp}`,
+                              status: 'prepared'
+                            }
+                          ]);
+
+                          // 5. Create audit logs
+                          await supabase.from('audit_logs').insert({
+                            action: 'APPROVE_PARTNER_APPLICATION',
+                            table_name: 'partner_applications',
+                            details: `تم توثيق الشريك (${selectedApp.store_name_ar || selectedApp.business_name}) وصرف بيانات الدخول للبريد ${initialUsername}.`
+                          });
+
+                          alert('تم اعتماد وتوثيق الشريك وصرف التراخيص سحابياً بنجاح! 🚀');
+                          setShowApproveModal(false);
+                          setSelectedApp(null);
+                          fetchData();
+                        } catch (e: any) {
+                          alert(e.message);
+                        } finally {
+                          setLoading(false);
+                        }
+                      }}
+                      className="btn btn-primary"
+                      style={{ padding: '8px 24px', fontSize: '0.8rem' }}
+                    >
+                      {loading ? 'جاري الاعتماد...' : 'تأكيد واعتماد الحساب 🚀'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* TAB VIEW: إدارة أنواع الأنشطة (Admin-controlled classifications) */}
+            {activeNav === 'admin_activity_types' && (
+              <div style={{ background: 'var(--glass-bg)', border: '1px solid var(--glass-border)', padding: 24, borderRadius: 20, display: 'flex', flexDirection: 'column', gap: 20 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div>
+                    <h3 style={{ fontSize: '1.05rem', fontWeight: 900, color: 'white', margin: 0 }}>إدارة تصنيفات وأنواع الأنشطة التجارية (Admin Activity Types)</h3>
+                    <span style={{ fontSize: '0.74rem', color: 'var(--color-text-muted)', display: 'block', marginTop: '4px' }}>
+                      الأنشطة النشطة المحددة هنا تظهر للمتاجر والشركاء الجدد كخيارات عند التسجيل.
+                    </span>
+                  </div>
+                  <button 
+                    onClick={() => {
+                      setEditingActivity(null);
+                      setActivityForm({ name_ar: '', name_en: '', icon: 'Utensils', description: '', sort_order: activityTypes.length + 1 });
+                      setShowActivityModal(true);
+                    }}
+                    className="btn btn-primary" 
+                    style={{ padding: '8px 16px', fontSize: '0.76rem', display: 'flex', alignItems: 'center', gap: '6px' }}
+                  >
+                    <Plus size={14} /> إضافة نوع نشاط جديد
+                  </button>
+                </div>
+
+                <div style={{ overflowX: 'auto' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'right', fontSize: '0.82rem' }}>
+                    <thead>
+                      <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.08)', color: '#aaa3c2' }}>
+                        <th style={{ padding: '12px' }}>أيقونة النشاط</th>
+                        <th style={{ padding: '12px' }}>الاسم بالعربية</th>
+                        <th style={{ padding: '12px' }}>الاسم بالإنجليزية</th>
+                        <th style={{ padding: '12px' }}>الوصف والمهام</th>
+                        <th style={{ padding: '12px' }}>الترتيب فرز</th>
+                        <th style={{ padding: '12px' }}>الحالة العامة</th>
+                        <th style={{ padding: '12px' }}>حالة التسجيل</th>
+                        <th style={{ padding: '12px' }}>إجراءات تعديل</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {activityTypes.map((act, index) => (
+                        <tr key={act.id || index} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+                          <td style={{ padding: '12px', fontSize: '1.2rem' }}>🍔 {act.icon}</td>
+                          <td style={{ padding: '12px', fontWeight: 'bold', color: 'white' }}>{act.name_ar}</td>
+                          <td style={{ padding: '12px', color: '#c1bad6' }}>{act.name_en}</td>
+                          <td style={{ padding: '12px', color: 'var(--color-text-muted)' }}>{act.description || '-'}</td>
+                          <td style={{ padding: '12px' }}>{act.sort_order}</td>
+                          <td style={{ padding: '12px' }}>
+                            <button
+                              onClick={async () => {
+                                const newVal = !act.is_active;
+                                try {
+                                  const { error } = await supabase.from('business_activity_types').update({ is_active: newVal }).eq('id', act.id);
+                                  if (!error) {
+                                    setActivityTypes(prev => prev.map(a => a.id === act.id ? { ...a, is_active: newVal } : a));
+                                  }
+                                } catch (e) {
+                                  setActivityTypes(prev => prev.map(a => a.id === act.id ? { ...a, is_active: newVal } : a));
+                                }
+                              }}
+                              style={{
+                                background: act.is_active ? 'rgba(16,185,129,0.15)' : 'rgba(239,68,68,0.15)',
+                                color: act.is_active ? 'var(--color-success)' : '#f87171',
+                                border: 'none',
+                                padding: '4px 10px',
+                                borderRadius: '8px',
+                                fontSize: '0.7rem',
+                                fontWeight: 800,
+                                cursor: 'pointer'
+                              }}
+                            >
+                              {act.is_active ? 'نشط مفعل' : 'معطل بحظر'}
+                            </button>
+                          </td>
+                          <td style={{ padding: '12px' }}>
+                            <button
+                              onClick={async () => {
+                                const newVal = !act.is_registration_open;
+                                try {
+                                  const { error } = await supabase.from('business_activity_types').update({ is_registration_open: newVal }).eq('id', act.id);
+                                  if (!error) {
+                                    setActivityTypes(prev => prev.map(a => a.id === act.id ? { ...a, is_registration_open: newVal } : a));
+                                  }
+                                } catch (e) {
+                                  setActivityTypes(prev => prev.map(a => a.id === act.id ? { ...a, is_registration_open: newVal } : a));
+                                }
+                              }}
+                              style={{
+                                background: act.is_registration_open ? 'rgba(59,130,246,0.15)' : 'rgba(245,158,11,0.15)',
+                                color: act.is_registration_open ? '#60a5fa' : '#fbbf24',
+                                border: 'none',
+                                padding: '4px 10px',
+                                borderRadius: '8px',
+                                fontSize: '0.7rem',
+                                fontWeight: 800,
+                                cursor: 'pointer'
+                              }}
+                            >
+                              {act.is_registration_open ? 'مفتوح للتسجيل' : 'مغلق مؤقتاً'}
+                            </button>
+                          </td>
+                          <td style={{ padding: '12px' }}>
+                            <div style={{ display: 'flex', gap: '6px' }}>
+                              <button 
+                                onClick={() => {
+                                  setEditingActivity(act);
+                                  setActivityForm({
+                                    name_ar: act.name_ar,
+                                    name_en: act.name_en,
+                                    icon: act.icon,
+                                    description: act.description || '',
+                                    sort_order: act.sort_order
+                                  });
+                                  setShowActivityModal(true);
+                                }}
+                                style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.05)', color: 'white', padding: '4px 8px', borderRadius: '6px', cursor: 'pointer' }}
+                              >
+                                تعديل
+                              </button>
+                              <button 
+                                onClick={async () => {
+                                  if (confirm('هل أنت متأكد من حذف هذا النشاط؟')) {
+                                    try {
+                                      await supabase.from('business_activity_types').delete().eq('id', act.id);
+                                    } catch (e) {}
+                                    setActivityTypes(prev => prev.filter(a => a.id !== act.id));
+                                  }
+                                }}
+                                style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.2)', color: '#f87171', padding: '4px 8px', borderRadius: '6px', cursor: 'pointer' }}
+                              >
+                                حذف
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {/* Activity Type Edit/Add Modal */}
+            {showActivityModal && (
+              <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.8)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100000, padding: '24px', fontFamily: 'Cairo, sans-serif' }}>
+                <div style={{ background: '#181126', border: '1px solid rgba(138,44,255,0.2)', padding: '30px', borderRadius: '24px', maxWidth: '500px', width: '100%', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                  <h3 style={{ fontSize: '1.2rem', fontWeight: 900, color: 'white', margin: 0 }}>
+                    {editingActivity ? 'تعديل بيانات تصنيف النشاط ⚙️' : 'إضافة تصنيف نشاط جديد 🚀'}
+                  </h3>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                      <label style={{ fontSize: '0.8rem', color: '#aaa3c2', fontWeight: 800 }}>الاسم بالعربية *</label>
+                      <input 
+                        type="text" 
+                        value={activityForm.name_ar}
+                        onChange={(e) => setActivityForm(prev => ({ ...prev, name_ar: e.target.value }))}
+                        placeholder="مثال: مخبز وحلويات"
+                        style={{ padding: '10px 14px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.1)', background: '#120b1f', color: 'white', fontSize: '0.84rem' }}
+                      />
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                      <label style={{ fontSize: '0.8rem', color: '#aaa3c2', fontWeight: 800 }}>الاسم بالإنجليزية *</label>
+                      <input 
+                        type="text" 
+                        value={activityForm.name_en}
+                        onChange={(e) => setActivityForm(prev => ({ ...prev, name_en: e.target.value }))}
+                        placeholder="Bakery"
+                        style={{ padding: '10px 14px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.1)', background: '#120b1f', color: 'white', fontSize: '0.84rem' }}
+                      />
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr', gap: '14px' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                      <label style={{ fontSize: '0.8rem', color: '#aaa3c2', fontWeight: 800 }}>أيقونة التبويب (Lucide Name/Emoji)</label>
+                      <input 
+                        type="text" 
+                        value={activityForm.icon}
+                        onChange={(e) => setActivityForm(prev => ({ ...prev, icon: e.target.value }))}
+                        placeholder="Utensils / Bread"
+                        style={{ padding: '10px 14px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.1)', background: '#120b1f', color: 'white', fontSize: '0.84rem' }}
+                      />
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                      <label style={{ fontSize: '0.8rem', color: '#aaa3c2', fontWeight: 800 }}>ترتيب الفرز</label>
+                      <input 
+                        type="number" 
+                        value={activityForm.sort_order}
+                        onChange={(e) => setActivityForm(prev => ({ ...prev, sort_order: parseInt(e.target.value) || 1 }))}
+                        style={{ padding: '10px 14px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.1)', background: '#120b1f', color: 'white', fontSize: '0.84rem' }}
+                      />
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    <label style={{ fontSize: '0.8rem', color: '#aaa3c2', fontWeight: 800 }}>وصف مبسط للمستخدمين</label>
+                    <input 
+                      type="text" 
+                      value={activityForm.description}
+                      onChange={(e) => setActivityForm(prev => ({ ...prev, description: e.target.value }))}
+                      placeholder="محلات بيع الخبز والحلويات الطازجة فروع..."
+                      style={{ padding: '10px 14px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.1)', background: '#120b1f', color: 'white', fontSize: '0.84rem' }}
+                    />
+                  </div>
+
+                  <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '15px' }}>
+                    <button 
+                      onClick={() => setShowActivityModal(false)}
+                      style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: 'white', padding: '8px 20px', borderRadius: '10px', fontSize: '0.8rem', fontWeight: 800, cursor: 'pointer' }}
+                    >
+                      إلغاء
+                    </button>
+                    <button 
+                      onClick={async () => {
+                        if (!activityForm.name_ar || !activityForm.name_en) {
+                          alert('الرجاء ملء الحقول الإجبارية للنشاط.');
+                          return;
+                        }
+                        try {
+                          if (editingActivity) {
+                            // Update
+                            await supabase.from('business_activity_types').update({
+                              name_ar: activityForm.name_ar,
+                              name_en: activityForm.name_en,
+                              icon: activityForm.icon,
+                              description: activityForm.description,
+                              sort_order: activityForm.sort_order
+                            }).eq('id', editingActivity.id);
+
+                            setActivityTypes(prev => prev.map(a => a.id === editingActivity.id ? { ...a, ...activityForm } : a));
+                          } else {
+                            // Create new
+                            const newActId = Math.random().toString(36).substring(2, 12);
+                            const payload = {
+                              id: newActId,
+                              ...activityForm,
+                              is_active: true,
+                              is_registration_open: true
+                            };
+                            await supabase.from('business_activity_types').insert(payload);
+                            setActivityTypes(prev => [...prev, payload].sort((a,b) => a.sort_order - b.sort_order));
+                          }
+                          alert('تم حفظ تصنيف النشاط بنجاح! 🚀');
+                          setShowActivityModal(false);
+                          fetchData();
+                        } catch (e) {
+                          alert('حدث خطأ في الاتصال، تم الحفظ محلياً.');
+                          setShowActivityModal(false);
+                        }
+                      }}
+                      className="btn btn-primary"
+                      style={{ padding: '8px 24px', fontSize: '0.8rem' }}
+                    >
+                      حفظ النشاط التجاري 🚀
+                    </button>
+                  </div>
                 </div>
               </div>
             )}
@@ -1277,7 +1937,7 @@ export const AdminDashboard = ({ onBack, defaultTab, hideSidebar = false }: { on
             )}
 
             {/* FALLBACK VIEW FOR STATIC PAGES */}
-            {!['admin_home', 'admin_notifications', 'admin_kpis', 'admin_app_homepage', 'admin_banners', 'admin_sections', 'admin_categories', 'admin_stories', 'admin_sponsored_products', 'admin_flash_offers', 'admin_coupons', 'admin_push_notifications', 'admin_rewards', 'admin_partners', 'admin_partner_join_requests', 'admin_orders_all', 'admin_orders_active', 'admin_drivers', 'admin_order_tracking', 'admin_settings_general', 'admin_complaints'].includes(activeNav) && (
+            {!['admin_home', 'admin_notifications', 'admin_kpis', 'admin_app_homepage', 'admin_banners', 'admin_sections', 'admin_categories', 'admin_stories', 'admin_sponsored_products', 'admin_flash_offers', 'admin_coupons', 'admin_push_notifications', 'admin_rewards', 'admin_partners', 'admin_partner_join_requests', 'admin_activity_types', 'admin_orders_all', 'admin_orders_active', 'admin_drivers', 'admin_order_tracking', 'admin_settings_general', 'admin_complaints'].includes(activeNav) && (
               <div style={{ background: 'var(--glass-bg)', border: '1px solid var(--glass-border)', padding: 24, borderRadius: 20, textAlign: 'center' }}>
                 <h3 style={{ fontSize: '1.1rem', fontWeight: 900, marginBottom: 8 }}>هذه الصفحة قيد التحضير المباشر ⚙️</h3>
                 <p style={{ color: 'var(--color-text-muted)', fontSize: '0.84rem' }}>أنت تنظر حالياً إلى واجهة مستعرض المجموعات. سيتم تزويدها ببيانات إضافية تدريجياً.</p>
