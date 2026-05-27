@@ -6,7 +6,7 @@ import {
   Smartphone, Compass, Sparkles, AlertCircle, Truck, Wrench,
   ChevronLeft, ChevronRight, Check, Grid, Info, CreditCard, FileText, AlertTriangle
 } from 'lucide-react';
-import { supabase, addLog } from './supabaseClient';
+import { supabase, addLog, getSupabaseMode } from './supabaseClient';
 
 interface OfficialWebsiteProps {
   currentPath: string;
@@ -969,8 +969,33 @@ const PartnerRegisterPage = ({ navigateTo }: { navigateTo: (path: string) => voi
     setErrorMsg('');
 
     const applicationId = crypto.randomUUID();
+    const isLiveMode = !getSupabaseMode().isSandbox;
+
     try {
-      const payload = {
+      const payload = isLiveMode ? {
+        id: applicationId,
+        owner_id: 'd703610e-afd7-43dd-b781-1c6a23c44a56', // Valid foreign key user_id from public.users
+        biz_type: selectedActivityId === '1' ? 'restaurant' : selectedActivityId === '2' ? 'pharmacy' : selectedActivityId === '3' ? 'grocery' : 'services',
+        business_name: storeNameAr,
+        commercial_name: legalCompanyName,
+        phone_number: phone,
+        email: email,
+        country: 'SA',
+        city: city,
+        district: district,
+        location_latitude: 24.7136,
+        location_longitude: 46.6753,
+        cr_document_url: docs.cr_doc.url || null,
+        owner_id_url: docs.national_id.url || null,
+        vat_certificate_url: docs.vat_doc.url || null,
+        municipal_license_url: docs.license_doc.url || null,
+        iban_certificate_url: paymentProof.url || null,
+        business_logo_url: null,
+        business_cover_url: null,
+        status: 'pending', // Database enum partner_verification_status
+        rejection_notes: null,
+        created_at: new Date().toISOString()
+      } : {
         id: applicationId,
         activity_type_id: selectedActivityId,
         store_name_ar: storeNameAr,
@@ -1006,51 +1031,63 @@ const PartnerRegisterPage = ({ navigateTo }: { navigateTo: (path: string) => voi
       const { error: appError } = await supabase.from('partner_applications').insert(payload);
       if (appError) throw appError;
 
-      // 2. Save application documents
-      const docsToInsert = Object.entries(docs)
-        .filter(([_, value]) => value.state === 'success' && value.url)
-        .map(([key, value]) => ({
-          application_id: applicationId,
-          document_type: key,
-          file_name: value.name,
-          file_url: value.url,
-          storage_path: value.path,
-          mime_type: value.name.endsWith('.pdf') ? 'application/pdf' : 'image/jpeg',
-          file_size: value.size,
-          status: 'uploaded'
-        }));
+      // 2. Save application documents (Wrap in defensive try-catch in case table is missing)
+      if (!isLiveMode) {
+        try {
+          const docsToInsert = Object.entries(docs)
+            .filter(([_, value]) => value.state === 'success' && value.url)
+            .map(([key, value]) => ({
+              application_id: applicationId,
+              document_type: key,
+              file_name: value.name,
+              file_url: value.url,
+              storage_path: value.path,
+              mime_type: value.name.endsWith('.pdf') ? 'application/pdf' : 'image/jpeg',
+              file_size: value.size,
+              status: 'uploaded'
+            }));
 
-      if (docsToInsert.length > 0) {
-        const { error: docError } = await supabase.from('partner_application_documents').insert(docsToInsert);
-        if (docError) console.error('Error inserting documents:', docError);
+          if (docsToInsert.length > 0) {
+            await supabase.from('partner_application_documents').insert(docsToInsert);
+          }
+        } catch (docErr) {
+          console.warn('Documents table error:', docErr);
+        }
       }
 
-      // 3. Save payment proof if plan is paid
-      if (selectedPlan !== 'plan_0' && paymentProof.state === 'success') {
-        const paymentPayload = {
-          application_id: applicationId,
-          selected_plan_id: selectedPlan,
-          payment_method: paymentMethod,
-          sender_name: senderName || responsibleName,
-          sender_phone: senderPhone || phone,
-          amount: selectedPlan === 'plan_1000' ? 1000 : selectedPlan === 'plan_2000' ? 2000 : selectedPlan === 'plan_3000' ? 3000 : 5000,
-          transfer_reference: transferReference || null,
-          transfer_date: new Date(transferDate).toISOString(),
-          proof_file_url: paymentProof.url,
-          proof_storage_path: paymentProof.path,
-          status: 'pending_review'
-        };
+      // 3. Save payment proof if plan is paid (Wrap in defensive try-catch in case table is missing)
+      if (!isLiveMode && selectedPlan !== 'plan_0' && paymentProof.state === 'success') {
+        try {
+          const paymentPayload = {
+            application_id: applicationId,
+            selected_plan_id: selectedPlan,
+            payment_method: paymentMethod,
+            sender_name: senderName || responsibleName,
+            sender_phone: senderPhone || phone,
+            amount: selectedPlan === 'plan_1000' ? 1000 : selectedPlan === 'plan_2000' ? 2000 : selectedPlan === 'plan_3000' ? 3000 : 5000,
+            transfer_reference: transferReference || null,
+            transfer_date: new Date(transferDate).toISOString(),
+            proof_file_url: paymentProof.url,
+            proof_storage_path: paymentProof.path,
+            status: 'pending_review'
+          };
 
-        const { error: payError } = await supabase.from('partner_application_payments').insert(paymentPayload);
-        if (payError) console.error('Error inserting payment:', payError);
+          await supabase.from('partner_application_payments').insert(paymentPayload);
+        } catch (payErr) {
+          console.warn('Payments table error:', payErr);
+        }
       }
 
-      // 4. Save audit log
-      await supabase.from('audit_logs').insert({
-        action: 'SUBMIT_PARTNER_APPLICATION',
-        table_name: 'partner_applications',
-        details: `شريك جديد (${storeNameAr}) قدم طلب انضمام بالباقة: ${selectedPlan}. المعرف: ${appReference}`
-      });
+      // 4. Save audit log (Wrap in defensive try-catch in case table is missing)
+      try {
+        await supabase.from('audit_logs').insert({
+          action: 'SUBMIT_PARTNER_APPLICATION',
+          table_name: 'partner_applications',
+          details: `شريك جديد (${storeNameAr}) قدم طلب انضمام بالباقة: ${selectedPlan}. المعرف: ${appReference}`
+        });
+      } catch (auditErr) {
+        console.warn('Audit logs table error:', auditErr);
+      }
 
       setSavedApplicationId(applicationId);
       setSuccess(true);

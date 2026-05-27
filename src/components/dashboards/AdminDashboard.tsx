@@ -1183,7 +1183,7 @@ export const AdminDashboard = ({ onBack, defaultTab, hideSidebar = false }: { on
                   ].map(tab => {
                     const count = tab.key === 'all' 
                       ? partnerApps.length 
-                      : partnerApps.filter(p => p.status === tab.key).length;
+                      : partnerApps.filter(p => p.status === tab.key || (tab.key === 'submitted' && p.status === 'pending')).length;
                     const isActive = appFilterStatus === tab.key;
                     return (
                       <button
@@ -1218,7 +1218,7 @@ export const AdminDashboard = ({ onBack, defaultTab, hideSidebar = false }: { on
                     <h3 style={{ fontSize: '1rem', fontWeight: 900, marginBottom: 16 }}>ملفات طلبات الانضمام</h3>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
                       {partnerApps
-                        .filter(app => appFilterStatus === 'all' ? true : app.status === appFilterStatus)
+                        .filter(app => appFilterStatus === 'all' ? true : (app.status === appFilterStatus || (appFilterStatus === 'submitted' && app.status === 'pending')))
                         .map(app => {
                           const planText = app.selected_plan_id === 'plan_0' ? 'المجانية' : app.selected_plan_id === 'plan_1000' ? 'الأساسية' : app.selected_plan_id === 'plan_2000' ? 'النمو' : app.selected_plan_id === 'plan_3000' ? 'الاحترافية' : 'التميز';
                           const isSelected = selectedApp?.id === app.id;
