@@ -98,6 +98,8 @@ export const AdminDashboard = ({ onBack, defaultTab, hideSidebar = false }: { on
     ];
   });
   const [selectedApp, setSelectedApp] = useState<any>(null);
+  const [selectedAppDocs, setSelectedAppDocs] = useState<any[]>([]);
+  const [selectedAppPayment, setSelectedAppPayment] = useState<any>(null);
   const [showApproveModal, setShowApproveModal] = useState(false);
   const [initialUsername, setInitialUsername] = useState('');
   const [initialPasswordTemp, setInitialPasswordTemp] = useState('');
@@ -204,6 +206,42 @@ export const AdminDashboard = ({ onBack, defaultTab, hideSidebar = false }: { on
     localStorage.setItem('BX_SANDBOX_ACTIVITY_TYPES', JSON.stringify(activityTypes));
   }, [activityTypes]);
 
+  // Fetch documents & payments for selected partner application dynamically
+  useEffect(() => {
+    const fetchAppDetails = async () => {
+      if (!selectedApp) {
+        setSelectedAppDocs([]);
+        setSelectedAppPayment(null);
+        return;
+      }
+      try {
+        const { data: docs } = await supabase
+          .from('partner_application_documents')
+          .select('*')
+          .eq('application_id', selectedApp.id);
+        if (docs) {
+          setSelectedAppDocs(docs);
+        } else {
+          setSelectedAppDocs([]);
+        }
+
+        const { data: payments } = await supabase
+          .from('partner_application_payments')
+          .select('*')
+          .eq('application_id', selectedApp.id)
+          .limit(1);
+        if (payments && payments.length > 0) {
+          setSelectedAppPayment(payments[0]);
+        } else {
+          setSelectedAppPayment(null);
+        }
+      } catch (err) {
+        console.error('Error fetching app details dynamically:', err);
+      }
+    };
+    fetchAppDetails();
+  }, [selectedApp]);
+
   // Fetch from Supabase
   const fetchData = async () => {
     setLoading(true);
@@ -223,6 +261,66 @@ export const AdminDashboard = ({ onBack, defaultTab, hideSidebar = false }: { on
       if (activities && activities.length > 0) setActivityTypes(activities);
     } catch (e) {
       console.log('Using sandbox simulation data fallback.');
+      
+      const savedApps = localStorage.getItem('BX_SANDBOX_PARTNER_APPS');
+      if (savedApps) {
+        setPartnerApps(JSON.parse(savedApps));
+      } else {
+        const fallbackApps = [
+          {
+            id: 'tapp-shawarma-demo',
+            store_name_ar: 'شاورما وتكا بوست إكس التجريبية',
+            store_name_en: 'BoostX Shawarma & Tikka Test Store',
+            legal_company_name: 'شركة الطهاة المتميزين المحدودة',
+            responsible_person_name: 'المهندس عبدالرحمن محمد',
+            business_email: 'test-partner@boostxadv.com',
+            whatsapp_number: '+966500000123',
+            phone_number: '+966500000123',
+            city: 'الرياض',
+            district: 'الياسمين',
+            full_address: 'طريق الملك عبدالعزيز، حي الياسمين، الرياض 13322',
+            google_maps_url: 'https://maps.google.com/?q=24.774265,46.738586',
+            commercial_registration_number: '1010892743',
+            tax_number: '310928374600003',
+            notes: 'طلب انضمام شريك افتراضي لتجربة لوحة المراجعة التفاعلية والاعتماد وإصدار الحسابات.',
+            selected_plan_id: 'plan_2000',
+            terms_accepted: true,
+            terms_accepted_at: new Date().toISOString(),
+            status: 'submitted',
+            payment_method: 'insta_pay',
+            payment_reference: 'IP-TXN-9837248',
+            payment_proof_url: 'https://images.unsplash.com/photo-1554224155-8d04cb21cd6c?w=600&q=80',
+            created_at: new Date(Date.now() - 3600000).toISOString()
+          },
+          {
+            id: 'tapp-pharmacy-demo',
+            store_name_ar: 'صيدلية النخبة الدوائية',
+            store_name_en: 'Elite Pharmacy Group',
+            legal_company_name: 'مجموعة النخبة الطبية للرعاية',
+            responsible_person_name: 'د. خالد عبداللّه الأحمد',
+            business_email: 'elite-pharmacy@boostxadv.com',
+            whatsapp_number: '+966555123456',
+            phone_number: '+966555123456',
+            city: 'جدة',
+            district: 'الحمراء',
+            full_address: 'شارع فلسطين، حي الحمراء، جدة 23321',
+            google_maps_url: 'https://maps.google.com/?q=21.520448,39.167232',
+            commercial_registration_number: '4030983721',
+            tax_number: '300982736100003',
+            notes: 'يرجى مراجعة ترخيص صيدلية النخبة الدوائية وسرعة تفعيل باقة التميز 5000.',
+            selected_plan_id: 'plan_5000',
+            terms_accepted: true,
+            terms_accepted_at: new Date().toISOString(),
+            status: 'under_review',
+            payment_method: 'insta_pay',
+            payment_reference: 'IP-TXN-4512389',
+            payment_proof_url: 'https://images.unsplash.com/photo-1554224155-8d04cb21cd6c?w=600&q=80',
+            created_at: new Date(Date.now() - 7200000).toISOString()
+          }
+        ];
+        setPartnerApps(fallbackApps);
+        localStorage.setItem('BX_SANDBOX_PARTNER_APPS', JSON.stringify(fallbackApps));
+      }
     } finally {
       setLoading(false);
     }
@@ -1160,20 +1258,39 @@ export const AdminDashboard = ({ onBack, defaultTab, hideSidebar = false }: { on
                             📁 شهادة القيمة المضافة ➔
                           </a>
                         </div>
+
+                        {/* Dynamic Documents List */}
+                        {selectedAppDocs.length > 0 && (
+                          <div style={{ marginTop: '12px', borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '12px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                            <span style={{ fontSize: '0.72rem', color: '#c084fc', fontWeight: 800 }}>📂 المستندات الرسمية المرفوعة سحابياً:</span>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                              {selectedAppDocs.map(doc => {
+                                const docLabel = doc.document_type === 'cr_doc' ? 'السجل التجاري' : doc.document_type === 'license_doc' ? 'الرخصة البلدية' : doc.document_type === 'vat_doc' ? 'شهادة القيمة المضافة' : doc.document_type === 'national_id' ? 'الهوية الوطنية للمالك' : 'مستند إضافي';
+                                return (
+                                  <div key={doc.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 12px', background: 'rgba(255,255,255,0.02)', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.04)' }}>
+                                    <span style={{ fontSize: '0.74rem', color: 'white' }}>📜 {docLabel} ({doc.file_name})</span>
+                                    <a href={doc.file_url} target="_blank" rel="noreferrer" style={{ fontSize: '0.72rem', color: '#a855f7', textDecoration: 'none', fontWeight: 900 }}>معاينة المستند ➔</a>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
                       </div>
 
                       {/* Payment Proof details if paid plan */}
-                      {selectedApp.selected_plan_id !== 'plan_0' && (
+                      {(selectedApp.selected_plan_id !== 'plan_0' || selectedAppPayment) && (
                         <div style={{ background: 'rgba(138,44,255,0.02)', border: '1px solid rgba(138,44,255,0.15)', borderRadius: '16px', padding: '16px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
                           <span style={{ fontSize: '0.78rem', color: '#c084fc', fontWeight: 900 }}>💳 إثبات السداد المالي للتحويل:</span>
                           <div style={{ fontSize: '0.74rem', color: '#cac4dd', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px' }}>
-                            <div>وسيلة التحويل: <strong>{selectedApp.payment_method === 'insta_pay' ? 'InstaPay' : 'Vodafone Cash'}</strong></div>
-                            <div>صاحب الحساب: <span>{selectedApp.sender_name || 'مرسل الشريك'}</span></div>
-                            <div>رقم جوال المحول: <span>{selectedApp.sender_phone || selectedApp.phone_number}</span></div>
-                            {selectedApp.payment_reference && <div>كود العملية: <span style={{ fontFamily: 'monospace' }}>{selectedApp.payment_reference}</span></div>}
-                            {selectedApp.payment_proof_url && (
+                            <div>وسيلة التحويل: <strong>{selectedAppPayment?.payment_method === 'insta_pay' || selectedApp.payment_method === 'insta_pay' ? 'InstaPay' : 'Vodafone Cash'}</strong></div>
+                            <div>صاحب الحساب: <span>{selectedAppPayment?.sender_name || selectedApp.sender_name || 'مرسل الشريك'}</span></div>
+                            <div>رقم جوال المحول: <span>{selectedAppPayment?.sender_phone || selectedApp.sender_phone || selectedApp.phone_number}</span></div>
+                            <div>المبلغ المحول: <strong style={{ color: 'white' }}>{selectedAppPayment?.amount || (selectedApp.selected_plan_id === 'plan_1000' ? 1000 : selectedApp.selected_plan_id === 'plan_2000' ? 2000 : selectedApp.selected_plan_id === 'plan_3000' ? 3000 : selectedApp.selected_plan_id === 'plan_5000' ? 5000 : 0)} ر.س</strong></div>
+                            {(selectedAppPayment?.transfer_reference || selectedApp.payment_reference) && <div>كود العملية: <span style={{ fontFamily: 'monospace' }}>{selectedAppPayment?.transfer_reference || selectedApp.payment_reference}</span></div>}
+                            {(selectedAppPayment?.proof_file_url || selectedApp.payment_proof_url) && (
                               <div style={{ gridColumn: 'span 2', marginTop: '6px' }}>
-                                <a href={selectedApp.payment_proof_url} target="_blank" rel="noreferrer" style={{ color: '#c084fc', textDecoration: 'underline' }}>📂 فتح لقطة شاشة إيصال السداد ➔</a>
+                                <a href={selectedAppPayment?.proof_file_url || selectedApp.payment_proof_url} target="_blank" rel="noreferrer" style={{ color: '#c084fc', textDecoration: 'underline' }}>📂 فتح لقطة شاشة إيصال السداد المرفوع ➔</a>
                               </div>
                             )}
                           </div>
@@ -1217,7 +1334,13 @@ export const AdminDashboard = ({ onBack, defaultTab, hideSidebar = false }: { on
                                   alert('تم إخطار الشريك بنواقص التراخيص بنجاح ⚠️');
                                   setSelectedApp(null);
                                   fetchData();
-                                } catch (e: any) { alert(e.message); }
+                                } catch (e: any) {
+                                  const updated = partnerApps.map(a => a.id === selectedApp.id ? { ...a, status: 'needs_more_info', admin_notes: adminNotes } : a);
+                                  setPartnerApps(updated);
+                                  localStorage.setItem('BX_SANDBOX_PARTNER_APPS', JSON.stringify(updated));
+                                  alert('تنبيه: تعذر تحديث قاعدة البيانات (تم الحفظ محلياً في الـ Sandbox) ⚠️');
+                                  setSelectedApp(null);
+                                }
                               }}
                               className="btn btn-secondary" 
                               style={{ padding: '8px 16px', fontSize: '0.8rem', color: '#fbbf24', border: '1px solid rgba(245,158,11,0.3)' }}
@@ -1232,7 +1355,13 @@ export const AdminDashboard = ({ onBack, defaultTab, hideSidebar = false }: { on
                                   alert('تم رفض طلب الانضمام ❌');
                                   setSelectedApp(null);
                                   fetchData();
-                                } catch (e: any) { alert(e.message); }
+                                } catch (e: any) {
+                                  const updated = partnerApps.map(a => a.id === selectedApp.id ? { ...a, status: 'rejected', admin_notes: adminNotes } : a);
+                                  setPartnerApps(updated);
+                                  localStorage.setItem('BX_SANDBOX_PARTNER_APPS', JSON.stringify(updated));
+                                  alert('تنبيه: تعذر تحديث قاعدة البيانات (تم رفض الطلب محلياً في الـ Sandbox) ❌');
+                                  setSelectedApp(null);
+                                }
                               }}
                               className="btn btn-secondary" 
                               style={{ padding: '8px 16px', fontSize: '0.8rem', color: '#f87171', border: '1px solid rgba(239,68,68,0.3)' }}
@@ -1249,16 +1378,27 @@ export const AdminDashboard = ({ onBack, defaultTab, hideSidebar = false }: { on
                                 <div style={{ fontSize: '0.76rem', color: 'white' }}>اسم المستخدم: <strong>{selectedApp.initial_username}</strong></div>
                                 <div style={{ fontSize: '0.76rem', color: 'white' }}>كلمة المرور المؤقتة: <strong style={{ color: '#c084fc', fontFamily: 'monospace' }}>{selectedApp.initial_password_temp}</strong></div>
                                 
-                                <div style={{ display: 'flex', gap: '8px', marginTop: '6px' }}>
+                                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '6px' }}>
                                   <button 
                                     onClick={() => {
-                                      const text = `🎉 أهلاً بك شريكنا العزيز بـ BoostX!\nتم قبول انضمام فرعك الموقر بنجاح.\nإليك بيانات الدخول بوابتك الرسمية:\n🔗 الرابط: https://boostxadv.com/portals\n👤 اسم المستخدم: ${selectedApp.initial_username}\n🔑 كلمة المرور المؤقتة: ${selectedApp.initial_password_temp}\n💡 يرجى تبديل كلمة المرور بعد أول تسجيل دخول.`;
+                                      const text = `🎉 أهلاً بك شريكنا العزيز بـ BoostX!\nتم قبول انضمام فرعك الموقر بنجاح.\nإليك بيانات الدخول بوابتك الرسمية:\n🔗 الرابط: https://boostxadv.com/partner\n👤 اسم المستخدم: ${selectedApp.initial_username}\n🔑 كلمة المرور المؤقتة: ${selectedApp.initial_password_temp}\n💡 يرجى تبديل كلمة المرور بعد أول تسجيل دخول.`;
+                                      const phone = selectedApp.whatsapp_number || selectedApp.phone_number || '';
+                                      const cleanPhone = phone.replace(/\D/g, '');
+                                      window.open(`https://wa.me/${cleanPhone}?text=${encodeURIComponent(text)}`, '_blank');
+                                    }}
+                                    style={{ background: 'linear-gradient(135deg, #10b981, #059669)', border: 'none', color: 'white', padding: '6px 14px', borderRadius: '8px', fontSize: '0.72rem', cursor: 'pointer', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '4px', boxShadow: '0 2px 8px rgba(16,185,129,0.2)' }}
+                                  >
+                                    💬 تواصل واتساب
+                                  </button>
+                                  <button 
+                                    onClick={() => {
+                                      const text = `🎉 أهلاً بك شريكنا العزيز بـ BoostX!\nتم قبول انضمام فرعك الموقر بنجاح.\nإليك بيانات الدخول بوابتك الرسمية:\n🔗 الرابط: https://boostxadv.com/partner\n👤 اسم المستخدم: ${selectedApp.initial_username}\n🔑 كلمة المرور المؤقتة: ${selectedApp.initial_password_temp}\n💡 يرجى تبديل كلمة المرور بعد أول تسجيل دخول.`;
                                       navigator.clipboard.writeText(text);
                                       alert('تم نسخ رسالة التفعيل والترحيب للـ WhatsApp بنجاح! 📱');
                                     }}
-                                    style={{ background: 'rgba(16,185,129,0.15)', border: '1px solid rgba(16,185,129,0.3)', color: 'var(--color-success)', padding: '4px 10px', borderRadius: '8px', fontSize: '0.7rem', cursor: 'pointer', fontWeight: 800 }}
+                                    style={{ background: 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.2)', color: '#34d399', padding: '6px 12px', borderRadius: '8px', fontSize: '0.72rem', cursor: 'pointer', fontWeight: 800 }}
                                   >
-                                    📋 نسخ رسالة WhatsApp الترحيبية
+                                    📋 نسخ الرسالة الترحيبية
                                   </button>
                                   <button 
                                     onClick={() => {
@@ -1266,9 +1406,9 @@ export const AdminDashboard = ({ onBack, defaultTab, hideSidebar = false }: { on
                                       navigator.clipboard.writeText(text);
                                       alert('تم نسخ رسالة البريد الإلكتروني للمسؤول! ✉️');
                                     }}
-                                    style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: 'white', padding: '4px 10px', borderRadius: '8px', fontSize: '0.7rem', cursor: 'pointer', fontWeight: 800 }}
+                                    style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: 'white', padding: '6px 12px', borderRadius: '8px', fontSize: '0.72rem', cursor: 'pointer', fontWeight: 800 }}
                                   >
-                                    ✉️ نسخ رسالة البريد الإلكتروني
+                                    ✉️ نسخ رسالة الإيميل
                                   </button>
                                 </div>
                               </div>
@@ -1404,7 +1544,34 @@ export const AdminDashboard = ({ onBack, defaultTab, hideSidebar = false }: { on
                           setSelectedApp(null);
                           fetchData();
                         } catch (e: any) {
-                          alert(e.message);
+                          // Sandbox fallback update
+                          const updated = partnerApps.map(a => a.id === selectedApp.id ? { 
+                            ...a, 
+                            status: 'approved', 
+                            admin_notes: adminNotes,
+                            initial_username: initialUsername,
+                            initial_password_temp: initialPasswordTemp,
+                            approved_at: new Date().toISOString()
+                          } : a);
+                          setPartnerApps(updated);
+                          localStorage.setItem('BX_SANDBOX_PARTNER_APPS', JSON.stringify(updated));
+                          
+                          // Simulating table creations in sandbox
+                          const savedPartners = JSON.parse(localStorage.getItem('BX_SANDBOX_PARTNERS') || '[]');
+                          savedPartners.push({
+                            id: 'p-' + Math.random().toString(36).substring(2, 10),
+                            name: selectedApp.store_name_ar || selectedApp.business_name,
+                            city: selectedApp.city,
+                            district: selectedApp.district,
+                            whatsapp: selectedApp.whatsapp_number,
+                            is_active: true,
+                            status: 'approved'
+                          });
+                          localStorage.setItem('BX_SANDBOX_PARTNERS', JSON.stringify(savedPartners));
+
+                          alert('تنبيه: تم اعتماد الشريك وصرف الحساب محلياً في الـ Sandbox بنجاح! 🚀');
+                          setShowApproveModal(false);
+                          setSelectedApp(null);
                         } finally {
                           setLoading(false);
                         }
