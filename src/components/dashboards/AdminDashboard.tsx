@@ -100,6 +100,7 @@ export const AdminDashboard = ({ onBack, defaultTab, hideSidebar = false }: { on
   const [selectedApp, setSelectedApp] = useState<any>(null);
   const [selectedAppDocs, setSelectedAppDocs] = useState<any[]>([]);
   const [selectedAppPayment, setSelectedAppPayment] = useState<any>(null);
+  const [queryError, setQueryError] = useState<string | null>(null);
   const [showApproveModal, setShowApproveModal] = useState(false);
   const [initialUsername, setInitialUsername] = useState('');
   const [initialPasswordTemp, setInitialPasswordTemp] = useState('');
@@ -246,12 +247,18 @@ export const AdminDashboard = ({ onBack, defaultTab, hideSidebar = false }: { on
   const fetchData = async () => {
     setLoading(true);
     try {
-      const { data: partners } = await supabase.from('partner_applications').select('*').order('created_at', { ascending: false });
+      const { data: partners, error: partErr } = await supabase.from('partner_applications').select('*').order('created_at', { ascending: false });
       const { data: drivers } = await supabase.from('driver_applications').select('*').order('created_at', { ascending: false });
       const { data: cats } = await supabase.from('categories').select('*');
       const { data: sps } = await supabase.from('sponsored_products').select('*');
       const { data: ords } = await supabase.from('orders').select('*').order('created_at', { ascending: false });
       const { data: activities } = await supabase.from('business_activity_types').select('*').order('sort_order', { ascending: true });
+
+      if (partErr) {
+        setQueryError(partErr.message);
+      } else {
+        setQueryError(null);
+      }
 
       if (partners) setPartnerApps(partners);
       if (drivers) setDriverApps(drivers);
@@ -259,8 +266,9 @@ export const AdminDashboard = ({ onBack, defaultTab, hideSidebar = false }: { on
       if (sps) setSponsoredProducts(sps);
       if (ords) setOrders(ords);
       if (activities && activities.length > 0) setActivityTypes(activities);
-    } catch (e) {
+    } catch (e: any) {
       console.log('Using sandbox simulation data fallback.');
+      setQueryError(e.message || 'Supabase Connection Mismatch');
       
       const savedApps = localStorage.getItem('BX_SANDBOX_PARTNER_APPS');
       if (savedApps) {
@@ -1141,11 +1149,17 @@ export const AdminDashboard = ({ onBack, defaultTab, hideSidebar = false }: { on
                       <span style={{ fontSize: '0.68rem', color: '#c084fc', display: 'block', marginTop: '2px' }}>
                         الجدول المستعلم: <span style={{ fontFamily: 'monospace', color: 'white' }}>partner_applications</span> • حالة المراقبة والاشتراك: <span style={{ color: 'var(--color-success)', fontWeight: 'bold' }}>نشط ومتصل بالـ Realtime 🟢</span>
                       </span>
+                      {queryError && (
+                        <span style={{ fontSize: '0.68rem', color: '#f87171', display: 'block', marginTop: '4px', fontWeight: 'bold' }}>
+                          ⚠️ خطأ الاستعلام النشط: {queryError}
+                        </span>
+                      )}
                     </div>
                   </div>
-                  <div style={{ display: 'flex', gap: '15px', fontSize: '0.76rem', color: '#cac4dd' }}>
-                    <div>عدد الطلبات المحملة: <strong style={{ color: 'white' }}>{partnerApps.length} طلب</strong></div>
-                    <div>آخر تحديث مستلم: <strong style={{ color: 'white', fontFamily: 'monospace' }}>{partnerApps.length > 0 ? new Date(partnerApps[0].created_at).toLocaleTimeString() : 'لا يوجد'}</strong></div>
+                  <div style={{ display: 'flex', gap: '15px', fontSize: '0.76rem', color: '#cac4dd', flexWrap: 'wrap' }}>
+                    <div>عدد الطلبات: <strong style={{ color: 'white' }}>{partnerApps.length}</strong></div>
+                    <div>أحدث معرّف ID: <strong style={{ color: '#c084fc', fontFamily: 'monospace' }}>{partnerApps.length > 0 ? partnerApps[0].id?.substring(0, 8) + '...' : 'لا يوجد'}</strong></div>
+                    <div>آخر تحديث: <strong style={{ color: 'white', fontFamily: 'monospace' }}>{partnerApps.length > 0 ? new Date(partnerApps[0].created_at).toLocaleTimeString() : 'لا يوجد'}</strong></div>
                   </div>
                 </div>
                 

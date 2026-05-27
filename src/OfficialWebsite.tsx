@@ -968,7 +968,7 @@ const PartnerRegisterPage = ({ navigateTo }: { navigateTo: (path: string) => voi
     setLoading(true);
     setErrorMsg('');
 
-    const applicationId = Math.random().toString(36).substring(2, 17) + '-' + Math.random().toString(36).substring(2, 17);
+    const applicationId = crypto.randomUUID();
     try {
       const payload = {
         id: applicationId,
@@ -1056,9 +1056,44 @@ const PartnerRegisterPage = ({ navigateTo }: { navigateTo: (path: string) => voi
       setSuccess(true);
       addLog('success', 'طلب شريك جديد', `تم تقديم طلب الانضمام رقم ${appReference} للشريك ${storeNameAr} سحابياً!`);
     } catch (err: any) {
-      console.error(err);
+      console.error('Supabase insert failed, saving to local Sandbox fallback:', err);
       setSavedApplicationId(applicationId);
       setErrorMsg(err.message || 'فشل الاتصال وحفظ طلبك في Supabase سحابياً. تم تفعيل خادم المحاكاة الاحتياطي بنجاح وحفظ السجل محلياً.');
+      
+      const newApp = {
+        id: applicationId,
+        activity_type_id: selectedActivityId,
+        store_name_ar: storeNameAr,
+        store_name_en: storeNameEn || null,
+        legal_company_name: legalCompanyName,
+        responsible_person_name: responsibleName,
+        business_email: email,
+        whatsapp_number: whatsapp || phone,
+        phone_number: phone,
+        city: city,
+        district: district,
+        full_address: address,
+        google_maps_url: googleMapsUrl || null,
+        commercial_registration_number: crNumber,
+        tax_number: taxNumber || null,
+        notes: notes || null,
+        selected_plan_id: selectedPlan,
+        terms_accepted: termsAccepted,
+        terms_accepted_at: new Date().toISOString(),
+        payment_method: selectedPlan === 'plan_0' ? null : paymentMethod,
+        payment_reference: selectedPlan === 'plan_0' ? null : transferReference,
+        payment_proof_url: selectedPlan === 'plan_0' ? null : paymentProof.url,
+        status: 'submitted',
+        created_at: new Date().toISOString()
+      };
+
+      const savedApps = JSON.parse(localStorage.getItem('BX_SANDBOX_PARTNER_APPS') || '[]');
+      savedApps.unshift(newApp);
+      localStorage.setItem('BX_SANDBOX_PARTNER_APPS', JSON.stringify(savedApps));
+      
+      // Dispatch realtime local event
+      window.dispatchEvent(new CustomEvent('BX_REALTIME_CHANGE', { detail: { table: 'partner_applications' } }));
+      
       setSuccess(true);
     } finally {
       setLoading(false);
